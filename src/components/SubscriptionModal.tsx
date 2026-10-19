@@ -154,7 +154,7 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
               <div className="p-3 rounded-2xl bg-amber-950/40 border border-amber-800/50 text-amber-300 text-xs flex items-center gap-2">
                 <Lock className="w-4 h-4 shrink-0 text-amber-400" />
                 <span>
-                  Seu teste gratuito de 07 dias chegou ao fim. Para continuar vendendo e anotando fiados, ative seu plano.
+                  Seu teste gratuito de 07 dias chegou ao fim. Para continuar vendendo e anotando vendas a prazo, ative seu plano.
                 </span>
               </div>
             )}
@@ -178,7 +178,7 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
               </div>
               <div className="flex items-center gap-2">
                 <Check className="w-4 h-4 text-emerald-400 shrink-0" />
-                <span>Caderninho de fiado com lembrete amigável no Zap</span>
+                <span>Caderninho de vendas a prazo com lembrete amigável no Zap</span>
               </div>
               <div className="flex items-center gap-2">
                 <Check className="w-4 h-4 text-emerald-400 shrink-0" />

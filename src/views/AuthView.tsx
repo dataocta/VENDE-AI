@@ -94,7 +94,7 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
             />
           </div>
           <p className="text-xs sm:text-sm text-slate-300 max-w-xs mx-auto font-medium">
-            Gestão inteligente de vendas, despesas e fiado na rua
+            Gestão inteligente de vendas, despesas e vendas a prazo na rua
           </p>
 
           {/* 7 Days Free Trial Highlight Badge */}
