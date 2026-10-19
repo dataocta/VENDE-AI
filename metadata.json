@@ -1,0 +1,6 @@
+{
+  "name": "RuaPro - Vendas & Despesas na Rua",
+  "description": "App mobile SaaS ultrarrápido para vendedores de rua, autônomos e ambulantes gerenciarem vendas, despesas, caixa do dia, cobranças no WhatsApp e metas com 100% de funcionamento offline.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
