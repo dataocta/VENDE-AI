@@ -16,7 +16,7 @@ import {
   BookUser,
   AlertCircle,
 } from 'lucide-react';
-import { Product, Sale, CartItem, PaymentMethod, BusinessSettings, Customer } from '../types';
+import { Product, Sale, CartItem, PaymentMethod, BusinessSettings, Customer, Expense } from '../types';
 import { formatCurrency, formatDateBR, getPaymentMethodLabel, generateWhatsAppSaleReceipt } from '../utils/receipt';
 import { playSaleChime, playTapBeep } from '../utils/audio';
 import { SalesAnalyticsCharts } from '../components/SalesAnalyticsCharts';
@@ -24,6 +24,7 @@ import { SalesAnalyticsCharts } from '../components/SalesAnalyticsCharts';
 interface PosViewProps {
   products: Product[];
   sales: Sale[];
+  expenses?: Expense[];
   customers?: Customer[];
   settings: BusinessSettings;
   onCompleteSale: (sale: Sale) => void;
@@ -35,6 +36,7 @@ interface PosViewProps {
 export const PosView: React.FC<PosViewProps> = ({
   products,
   sales,
+  expenses = [],
   customers = [],
   settings,
   onCompleteSale,
@@ -54,7 +56,8 @@ export const PosView: React.FC<PosViewProps> = ({
   const todayStr = new Date().toISOString().split('T')[0];
   const todaySales = sales.filter((s) => s.status === 'concluida' && s.date.startsWith(todayStr));
   const todaySalesTotal = todaySales.reduce((acc, s) => acc + s.totalAmount, 0);
-  const todayProfitTotal = todaySales.reduce((acc, s) => acc + (s.totalAmount - (s.totalCost || 0)), 0);
+  const todayExpenses = expenses.filter((e) => e.date.startsWith(todayStr));
+  const todayExpensesTotal = todayExpenses.reduce((acc, e) => acc + e.amount, 0);
   const goalProgress = settings.dailyGoal > 0 ? Math.min(100, Math.round((todaySalesTotal / settings.dailyGoal) * 100)) : 0;
 
   // Categories list
@@ -200,9 +203,9 @@ export const PosView: React.FC<PosViewProps> = ({
           </div>
 
           <div className="border-l border-slate-200 pl-3">
-            <div className="text-xs text-slate-500 font-medium">Lucro Bruto Estimado</div>
-            <div className="text-2xl sm:text-3xl font-black text-emerald-600 font-mono-numbers tracking-tight">
-              {formatCurrency(todayProfitTotal)}
+            <div className="text-xs text-slate-500 font-medium">Total de Despesas</div>
+            <div className="text-2xl sm:text-3xl font-black text-rose-600 font-mono-numbers tracking-tight">
+              {formatCurrency(todayExpensesTotal)}
             </div>
           </div>
         </div>
@@ -226,15 +229,15 @@ export const PosView: React.FC<PosViewProps> = ({
         )}
       </div>
 
-      {/* 2. Fast Primary Action: Teclado Venda Rápida */}
+      {/* 2. Fast Primary Action: Registrar Venda */}
       <div className="grid grid-cols-1 gap-2.5">
         <button
           type="button"
           onClick={onOpenNumpadSale}
-          className="w-full min-h-[52px] rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-sm flex items-center justify-center gap-2 shadow-xs touch-press transition-colors"
+          className="w-full min-h-[52px] rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-sm flex items-center justify-center gap-2 shadow-xs touch-press transition-colors tracking-wide"
         >
           <Zap className="w-4 h-4 fill-white stroke-none" />
-          <span>DIGITAR VALOR (TECLADO NUMÉRICO)</span>
+          <span>REGISTRAR VENDA</span>
         </button>
       </div>
 

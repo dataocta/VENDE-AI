@@ -301,6 +301,7 @@ export default function App() {
           <PosView
             products={products}
             sales={sales}
+            expenses={expenses}
             customers={customers}
             settings={settings}
             onCompleteSale={handleCompleteSale}

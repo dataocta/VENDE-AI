@@ -176,6 +176,41 @@ export function loginUser(
   return { success: true, user };
 }
 
+export function loginWithGoogle(
+  email?: string,
+  name?: string
+): { success: boolean; user: UserAccount } {
+  const users = getRegisteredUsers();
+  const cleanEmail = (email || 'cosquinha66@gmail.com').trim().toLowerCase();
+  const defaultName = cleanEmail.split('@')[0].replace(/[._]/g, ' ');
+  const cleanName = name || defaultName || 'Vendedor';
+  const capitalizedName = cleanName.charAt(0).toUpperCase() + cleanName.slice(1);
+
+  let user = users.find((u) => u.email.toLowerCase() === cleanEmail);
+
+  if (!user) {
+    const now = new Date();
+    const sevenDaysLater = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+    user = {
+      id: `google_${Date.now()}`,
+      name: capitalizedName,
+      email: cleanEmail,
+      phone: '',
+      businessName: `Vendas de ${capitalizedName.split(' ')[0]}`,
+      createdAt: now.toISOString(),
+      trialEndsAt: sevenDaysLater.toISOString(),
+      subscriptionStatus: 'trial',
+      planPrice: 15.97,
+    };
+    users.unshift(user);
+    saveRegisteredUsers(users);
+  }
+
+  setCurrentUser(user);
+  return { success: true, user };
+}
+
 export function logoutUser() {
   setCurrentUser(null);
 }

@@ -1,19 +1,17 @@
 import React, { useMemo, useState } from 'react';
 import {
-  BarChart3,
+  LineChart as LineChartIcon,
   Trophy,
   TrendingUp,
-  PackageCheck,
   CreditCard,
   QrCode,
   Banknote,
   BookUser,
-  Sparkles,
   ChevronDown,
   ChevronUp,
 } from 'lucide-react';
 import { Sale, BusinessSettings } from '../types';
-import { formatCurrency, formatDateOnlyBR } from '../utils/receipt';
+import { formatCurrency } from '../utils/receipt';
 
 interface SalesAnalyticsChartsProps {
   sales: Sale[];
@@ -25,12 +23,12 @@ export const SalesAnalyticsCharts: React.FC<SalesAnalyticsChartsProps> = ({
   settings,
 }) => {
   const [isExpanded, setIsExpanded] = useState(true);
+  const [activePointIndex, setActivePointIndex] = useState<number | null>(null);
 
-  // 1. Group sales by day (last 7 active days or last 7 calendar days)
+  // 1. Group sales by day (last 7 calendar days)
   const { dailyData, bestDay, totalPeriodSales } = useMemo(() => {
     const completed = sales.filter((s) => s.status === 'concluida');
 
-    // Create a 7-day range ending today
     const days: { dateStr: string; label: string; dayOfWeek: string; total: number; count: number }[] = [];
     const dayNames = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 
@@ -72,6 +70,49 @@ export const SalesAnalyticsCharts: React.FC<SalesAnalyticsChartsProps> = ({
       totalPeriodSales,
     };
   }, [sales]);
+
+  // Max value for line chart scaling
+  const maxDailyValue = Math.max(...dailyData.map((d) => d.total), 10);
+
+  // SVG Line Chart coordinates calculation
+  const svgWidth = 330;
+  const svgHeight = 125;
+  const paddingX = 24;
+  const paddingTop = 26;
+  const paddingBottom = 100;
+  const availableWidth = svgWidth - paddingX * 2;
+  const stepX = availableWidth / (dailyData.length - 1);
+  const availableHeight = paddingBottom - paddingTop;
+
+  const chartPoints = useMemo(() => {
+    return dailyData.map((d, i) => {
+      const x = paddingX + i * stepX;
+      // Invert Y: higher sales value gives smaller Y
+      const ratio = maxDailyValue > 0 ? d.total / maxDailyValue : 0;
+      const y = paddingBottom - ratio * availableHeight;
+      const isTop = bestDay && d.dateStr === bestDay.dateStr && d.total > 0;
+      return { ...d, x, y, isTop, index: i };
+    });
+  }, [dailyData, maxDailyValue, bestDay, availableHeight, paddingX, paddingBottom, stepX]);
+
+  // Construct smooth SVG Bezier curve line & area
+  const { linePathD, areaPathD } = useMemo(() => {
+    if (chartPoints.length === 0) return { linePathD: '', areaPathD: '' };
+
+    let line = `M ${chartPoints[0].x} ${chartPoints[0].y}`;
+    for (let i = 0; i < chartPoints.length - 1; i++) {
+      const current = chartPoints[i];
+      const next = chartPoints[i + 1];
+      const cpX = (current.x + next.x) / 2;
+      line += ` C ${cpX} ${current.y}, ${cpX} ${next.y}, ${next.x} ${next.y}`;
+    }
+
+    const last = chartPoints[chartPoints.length - 1];
+    const first = chartPoints[0];
+    const area = `${line} L ${last.x} ${paddingBottom} L ${first.x} ${paddingBottom} Z`;
+
+    return { linePathD: line, areaPathD: area };
+  }, [chartPoints, paddingBottom]);
 
   // 2. Ranking of most sold products
   const topProducts = useMemo(() => {
@@ -134,23 +175,20 @@ export const SalesAnalyticsCharts: React.FC<SalesAnalyticsChartsProps> = ({
     return { items, mostUsed, grandTotal };
   }, [sales]);
 
-  // Max value for bar chart scaling
-  const maxDailyValue = Math.max(...dailyData.map((d) => d.total), 10);
-
   return (
     <div className="bg-white border border-slate-200 rounded-3xl p-4 sm:p-5 shadow-xs space-y-4">
       {/* Header with toggle */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center">
-            <BarChart3 className="w-4 h-4" />
+            <LineChartIcon className="w-4 h-4" />
           </div>
           <div>
             <h3 className="text-sm font-extrabold text-slate-900 leading-tight">
               Desempenho &amp; Gráficos
             </h3>
             <p className="text-[11px] text-slate-500 font-medium">
-              Comparativo diário, produtos e pagamentos
+              Evolução em linha, produtos e pagamentos
             </p>
           </div>
         </div>
@@ -167,11 +205,12 @@ export const SalesAnalyticsCharts: React.FC<SalesAnalyticsChartsProps> = ({
 
       {isExpanded && (
         <div className="space-y-5 pt-1">
-          {/* GRÁFICO 1: COMPARATIVO DIÁRIO E DIA QUE MAIS VENDEU */}
+          {/* GRÁFICO 1: GRÁFICO DE LINHAS (COMPARATIVO DIÁRIO E DIA QUE MAIS VENDEU) */}
           <div className="space-y-2.5">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-                Vendas por Dia (Últimos 7 Dias)
+              <span className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                <TrendingUp className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Gráfico de Vendas por Linha</span>
               </span>
               <span className="text-xs font-mono-numbers text-slate-500">
                 Total: <strong>{formatCurrency(totalPeriodSales)}</strong>
@@ -200,43 +239,150 @@ export const SalesAnalyticsCharts: React.FC<SalesAnalyticsChartsProps> = ({
               </div>
             )}
 
-            {/* Bar Chart View */}
-            <div className="bg-slate-50/70 border border-slate-100 rounded-2xl p-3 pt-6">
-              <div className="grid grid-cols-7 items-end gap-1.5 h-32">
+            {/* SVG Line Chart View */}
+            <div className="bg-slate-50/70 border border-slate-100 rounded-2xl p-3 pt-3">
+              <div className="w-full overflow-hidden">
+                <svg
+                  viewBox={`0 0 ${svgWidth} ${svgHeight}`}
+                  className="w-full h-36 overflow-visible select-none"
+                >
+                  <defs>
+                    {/* Emerald area gradient under line */}
+                    <linearGradient id="emeraldAreaGradient" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#10b981" stopOpacity="0.25" />
+                      <stop offset="100%" stopColor="#10b981" stopOpacity="0.0" />
+                    </linearGradient>
+
+                    {/* Glow filter for record day */}
+                    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+                      <feDropShadow dx="0" dy="1" stdDeviation="2" floodColor="#059669" floodOpacity="0.3" />
+                    </filter>
+                  </defs>
+
+                  {/* Horizontal Guideline: Top / Mid / Baseline */}
+                  <line
+                    x1={paddingX}
+                    y1={paddingTop}
+                    x2={svgWidth - paddingX}
+                    y2={paddingTop}
+                    stroke="#e2e8f0"
+                    strokeWidth="1"
+                    strokeDasharray="3 3"
+                  />
+                  <line
+                    x1={paddingX}
+                    y1={(paddingTop + paddingBottom) / 2}
+                    x2={svgWidth - paddingX}
+                    y2={(paddingTop + paddingBottom) / 2}
+                    stroke="#e2e8f0"
+                    strokeWidth="1"
+                    strokeDasharray="3 3"
+                  />
+                  <line
+                    x1={paddingX}
+                    y1={paddingBottom}
+                    x2={svgWidth - paddingX}
+                    y2={paddingBottom}
+                    stroke="#cbd5e1"
+                    strokeWidth="1"
+                  />
+
+                  {/* Shaded Area Fill */}
+                  <path d={areaPathD} fill="url(#emeraldAreaGradient)" />
+
+                  {/* Continuous Line Curve */}
+                  <path
+                    d={linePathD}
+                    fill="none"
+                    stroke="#059669"
+                    strokeWidth="3"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="transition-all duration-300"
+                  />
+
+                  {/* Chart Points, Value labels & Record Day Badge */}
+                  {chartPoints.map((pt) => {
+                    const isHovered = activePointIndex === pt.index;
+
+                    return (
+                      <g key={pt.dateStr} className="cursor-pointer">
+                        {/* Hover vertical bar guide */}
+                        {isHovered && (
+                          <line
+                            x1={pt.x}
+                            y1={paddingTop}
+                            x2={pt.x}
+                            y2={paddingBottom}
+                            stroke="#059669"
+                            strokeWidth="1.5"
+                            strokeDasharray="2 2"
+                            opacity="0.6"
+                          />
+                        )}
+
+                        {/* Top day pulse halo */}
+                        {pt.isTop && (
+                          <circle
+                            cx={pt.x}
+                            cy={pt.y}
+                            r="9"
+                            fill="#a7f3d0"
+                            opacity="0.6"
+                            className="animate-pulse"
+                          />
+                        )}
+
+                        {/* Point Circle */}
+                        <circle
+                          cx={pt.x}
+                          cy={pt.y}
+                          r={pt.isTop ? 5.5 : pt.total > 0 ? 4 : 3}
+                          fill={pt.isTop ? '#047857' : pt.total > 0 ? '#10b981' : '#cbd5e1'}
+                          stroke="#ffffff"
+                          strokeWidth={pt.isTop ? 2.5 : 2}
+                          filter={pt.isTop ? 'url(#glow)' : undefined}
+                          onMouseEnter={() => setActivePointIndex(pt.index)}
+                          onMouseLeave={() => setActivePointIndex(null)}
+                          onTouchStart={() => setActivePointIndex(pt.index)}
+                        />
+
+                        {/* Value Text Above Point */}
+                        {pt.total > 0 && (
+                          <text
+                            x={pt.x}
+                            y={pt.y - 7}
+                            textAnchor="middle"
+                            className={`text-[9px] font-bold font-mono-numbers fill-slate-800 ${
+                              pt.isTop ? 'font-black fill-emerald-800' : ''
+                            }`}
+                          >
+                            {Math.round(pt.total)}
+                          </text>
+                        )}
+                      </g>
+                    );
+                  })}
+                </svg>
+              </div>
+
+              {/* Day Labels below chart aligned with 7 columns */}
+              <div className="grid grid-cols-7 pt-1 text-center">
                 {dailyData.map((d) => {
                   const isTopDay = bestDay && d.dateStr === bestDay.dateStr && d.total > 0;
-                  const heightPercent = maxDailyValue > 0 ? Math.max(8, Math.round((d.total / maxDailyValue) * 100)) : 8;
 
                   return (
-                    <div key={d.dateStr} className="flex flex-col items-center h-full justify-end group">
-                      {/* Value label on top */}
-                      <span className="text-[9px] font-bold text-slate-600 font-mono-numbers mb-1 truncate max-w-full text-center">
-                        {d.total > 0 ? Math.round(d.total) : ''}
+                    <div key={d.dateStr} className="flex flex-col items-center">
+                      <span
+                        className={`text-[10px] font-bold leading-tight ${
+                          isTopDay ? 'text-emerald-700 font-extrabold' : 'text-slate-600'
+                        }`}
+                      >
+                        {d.dayOfWeek}
                       </span>
-
-                      {/* Bar pillar */}
-                      <div className="w-full max-w-[28px] bg-slate-200/80 rounded-t-lg overflow-hidden flex flex-col justify-end transition-all">
-                        <div
-                          style={{ height: `${heightPercent}%` }}
-                          className={`w-full rounded-t-lg transition-all duration-500 ${
-                            isTopDay
-                              ? 'bg-emerald-600 shadow-sm'
-                              : d.total > 0
-                              ? 'bg-emerald-400'
-                              : 'bg-slate-200'
-                          }`}
-                        />
-                      </div>
-
-                      {/* Day Label */}
-                      <div className="text-center mt-1.5 leading-tight">
-                        <span className={`block text-[10px] font-bold ${isTopDay ? 'text-emerald-700' : 'text-slate-600'}`}>
-                          {d.dayOfWeek}
-                        </span>
-                        <span className="block text-[8px] text-slate-400">
-                          {d.label.split('/')[0]}
-                        </span>
-                      </div>
+                      <span className="text-[9px] text-slate-400">
+                        {d.label.split('/')[0]}
+                      </span>
                     </div>
                   );
                 })}
@@ -322,7 +468,6 @@ export const SalesAnalyticsCharts: React.FC<SalesAnalyticsChartsProps> = ({
                 {/* Grid of payment methods with amount & percentage */}
                 <div className="grid grid-cols-2 gap-2">
                   {paymentBreakdown.items.map((m) => {
-                    const Icon = m.icon;
                     return (
                       <div
                         key={m.label}
