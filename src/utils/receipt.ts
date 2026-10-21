@@ -35,6 +35,18 @@ export function formatDateOnlyBR(isoString: string): string {
   }
 }
 
+export function formatTimeOnlyBR(isoString: string): string {
+  try {
+    const date = new Date(isoString);
+    return new Intl.DateTimeFormat('pt-BR', {
+      hour: '2-digit',
+      minute: '2-digit',
+    }).format(date);
+  } catch {
+    return '';
+  }
+}
+
 export function getPaymentMethodLabel(method: string): string {
   switch (method) {
     case 'dinheiro':

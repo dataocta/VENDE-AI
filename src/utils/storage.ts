@@ -2,6 +2,7 @@ import {
   Sale,
   Expense,
   CustomerDebt,
+  Customer,
   Product,
   DailyRegister,
   BusinessSettings,
@@ -125,6 +126,11 @@ export function saveSale(sale: Sale, userId?: string): Sale[] {
   });
   if (productsChanged) {
     localStorage.setItem(`${getPrefix(userId)}_products`, JSON.stringify(products));
+  }
+
+  // If customer details were provided, save or update customer profile
+  if (sale.customerName || sale.customerPhone) {
+    upsertCustomerFromSale(sale, userId);
   }
 
   // If sale was fiado, update or create customer debt
@@ -314,6 +320,93 @@ function addSaleToDebts(sale: Sale, userId?: string) {
   localStorage.setItem(`${getPrefix(userId)}_debts`, JSON.stringify(debts));
 }
 
+export function getCustomers(userId?: string): Customer[] {
+  try {
+    const key = `${getPrefix(userId)}_customers`;
+    const raw = localStorage.getItem(key);
+    let list: Customer[] = raw ? JSON.parse(raw) : [];
+
+    // Ensure any existing customer from debts or past sales is populated
+    const debts = getDebts(userId);
+    let changed = false;
+    debts.forEach((debt) => {
+      const exists = list.some(
+        (c) => c.name.toLowerCase() === debt.name.toLowerCase() || (debt.phone && c.phone === debt.phone)
+      );
+      if (!exists && debt.name) {
+        list.push({
+          id: `cust_${debt.id}`,
+          name: debt.name,
+          phone: debt.phone || '',
+          addressOrSpot: debt.addressOrSpot,
+          createdAt: debt.lastPurchaseDate || new Date().toISOString(),
+        });
+        changed = true;
+      }
+    });
+
+    if (changed) {
+      localStorage.setItem(key, JSON.stringify(list));
+    }
+
+    return list;
+  } catch {
+    return [];
+  }
+}
+
+export function saveCustomer(customer: Customer, userId?: string): Customer[] {
+  const key = `${getPrefix(userId)}_customers`;
+  const list = getCustomers(userId);
+  const index = list.findIndex((c) => c.id === customer.id);
+  if (index >= 0) {
+    list[index] = customer;
+  } else {
+    list.unshift(customer);
+  }
+  localStorage.setItem(key, JSON.stringify(list));
+  return list;
+}
+
+export function deleteCustomer(id: string, userId?: string): Customer[] {
+  const key = `${getPrefix(userId)}_customers`;
+  const list = getCustomers(userId).filter((c) => c.id !== id);
+  localStorage.setItem(key, JSON.stringify(list));
+  return list;
+}
+
+export function upsertCustomerFromSale(sale: Sale, userId?: string) {
+  if (!sale.customerName && !sale.customerPhone) return;
+  const list = getCustomers(userId);
+  const nameToMatch = (sale.customerName || '').trim().toLowerCase();
+  const phoneToMatch = (sale.customerPhone || '').replace(/\D/g, '');
+
+  const found = list.find((c) => {
+    if (nameToMatch && c.name.trim().toLowerCase() === nameToMatch) return true;
+    if (phoneToMatch && c.phone.replace(/\D/g, '') === phoneToMatch) return true;
+    return false;
+  });
+
+  if (found) {
+    if (sale.customerPhone && !found.phone) {
+      found.phone = sale.customerPhone;
+    }
+    if (sale.customerName && (!found.name || found.name === 'Cliente')) {
+      found.name = sale.customerName;
+    }
+    saveCustomer(found, userId);
+  } else {
+    const newCust: Customer = {
+      id: `cust_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+      name: sale.customerName?.trim() || 'Cliente sem nome',
+      phone: sale.customerPhone?.trim() || '',
+      createdAt: sale.date || new Date().toISOString(),
+    };
+    list.unshift(newCust);
+    localStorage.setItem(`${getPrefix(userId)}_customers`, JSON.stringify(list));
+  }
+}
+
 export function getRegisters(userId?: string): Record<string, DailyRegister> {
   try {
     const key = `${getPrefix(userId)}_registers`;
@@ -354,6 +447,7 @@ export function resetUserData(userId?: string) {
   localStorage.removeItem(`${prefix}_expenses`);
   localStorage.removeItem(`${prefix}_products`);
   localStorage.removeItem(`${prefix}_debts`);
+  localStorage.removeItem(`${prefix}_customers`);
   localStorage.removeItem(`${prefix}_registers`);
   localStorage.removeItem(`${prefix}_settings`);
 }
@@ -365,6 +459,7 @@ export function exportAllDataJSON(userId?: string): string {
     sales: getSales(userId),
     expenses: getExpenses(userId),
     debts: getDebts(userId),
+    customers: getCustomers(userId),
     registers: getRegisters(userId),
     exportedAt: new Date().toISOString(),
   };
@@ -380,6 +475,7 @@ export function importAllDataJSON(jsonStr: string, userId?: string): boolean {
     if (data.sales) localStorage.setItem(`${prefix}_sales`, JSON.stringify(data.sales));
     if (data.expenses) localStorage.setItem(`${prefix}_expenses`, JSON.stringify(data.expenses));
     if (data.debts) localStorage.setItem(`${prefix}_debts`, JSON.stringify(data.debts));
+    if (data.customers) localStorage.setItem(`${prefix}_customers`, JSON.stringify(data.customers));
     if (data.registers) localStorage.setItem(`${prefix}_registers`, JSON.stringify(data.registers));
     return true;
   } catch (err) {

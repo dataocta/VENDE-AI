@@ -11,7 +11,7 @@ import { TrialBanner } from './components/TrialBanner';
 import { PosView } from './views/PosView';
 import { ExpensesView } from './views/ExpensesView';
 import { CashView } from './views/CashView';
-import { DebtsView } from './views/DebtsView';
+import { CustomersView } from './views/CustomersView';
 import { ProductsView } from './views/ProductsView';
 import { AuthView } from './views/AuthView';
 import {
@@ -27,6 +27,9 @@ import {
   getDebts,
   saveCustomerDebt,
   amortizeDebt,
+  getCustomers,
+  saveCustomer,
+  deleteCustomer,
   getDailyRegister,
   saveDailyRegister,
   getSettings,
@@ -40,7 +43,7 @@ import {
   logoutUser,
   getTrialInfo,
 } from './utils/authStorage';
-import { Sale, Expense, CustomerDebt, Product, DailyRegister, BusinessSettings, UserAccount } from './types';
+import { Sale, Expense, CustomerDebt, Customer, Product, DailyRegister, BusinessSettings, UserAccount } from './types';
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<UserAccount | null>(null);
@@ -49,6 +52,7 @@ export default function App() {
   const [sales, setSales] = useState<Sale[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [debts, setDebts] = useState<CustomerDebt[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
   const [settings, setSettings] = useState<BusinessSettings>(getSettings());
 
   const todayStr = new Date().toISOString().split('T')[0];
@@ -75,6 +79,7 @@ export default function App() {
     setSales(getSales(uid));
     setExpenses(getExpenses(uid));
     setDebts(getDebts(uid));
+    setCustomers(getCustomers(uid));
     const currentSettings = getSettings(uid);
     if (user) {
       if (user.businessName) {
@@ -116,6 +121,7 @@ export default function App() {
     setSales([]);
     setExpenses([]);
     setDebts([]);
+    setCustomers([]);
   };
 
   // Sale handlers
@@ -125,6 +131,7 @@ export default function App() {
     setSales(updatedSales);
     setProducts(getProducts(uid));
     setDebts(getDebts(uid));
+    setCustomers(getCustomers(uid));
     setIsNumpadOpen(false);
     setLastCompletedSale(sale);
   };
@@ -149,7 +156,7 @@ export default function App() {
     setExpenses(updatedExpenses);
   };
 
-  // Debt handlers
+  // Debt & Customer handlers
   const handleConfirmDebtPayment = (
     debtId: string,
     amount: number,
@@ -160,12 +167,26 @@ export default function App() {
     const res = amortizeDebt(debtId, amount, method, notes, uid);
     setDebts(res.debts);
     setSales(getSales(uid));
+    setCustomers(getCustomers(uid));
   };
 
   const handleSaveDebt = (debt: CustomerDebt) => {
     const uid = currentUser?.id;
     const updated = saveCustomerDebt(debt, uid);
     setDebts(updated);
+    setCustomers(getCustomers(uid));
+  };
+
+  const handleSaveCustomer = (customer: Customer) => {
+    const uid = currentUser?.id;
+    const updated = saveCustomer(customer, uid);
+    setCustomers(updated);
+  };
+
+  const handleDeleteCustomer = (id: string) => {
+    const uid = currentUser?.id;
+    const updated = deleteCustomer(id, uid);
+    setCustomers(updated);
   };
 
   // Product handlers
@@ -263,7 +284,7 @@ export default function App() {
         onUserUpdated={(updated) => setCurrentUser({ ...updated })}
       />
 
-      {/* Top Header */}
+      {/* Top Header (Clean, sem 100% offline, sem abas de luz, volume ou vender) */}
       <Header
         settings={settings}
         user={currentUser}
@@ -274,17 +295,31 @@ export default function App() {
         todaySalesTotal={todaySalesTotal}
       />
 
-      {/* Main Mobile-First Content Canvas */}
-      <main className="flex-1 w-full max-w-md mx-auto px-4 pt-3">
+      {/* Main Mobile-First Content Canvas with fixed bottom menu spacing */}
+      <main className="flex-1 w-full max-w-md mx-auto px-4 pt-3 pb-28 sm:pb-32">
         {activeTab === 'pos' && (
           <PosView
             products={products}
             sales={sales}
+            customers={customers}
             settings={settings}
             onCompleteSale={handleCompleteSale}
             onCancelSale={handleCancelSale}
             onOpenNumpadSale={() => setIsNumpadOpen(true)}
             onNavigateToTab={(tab) => setActiveTab(tab)}
+          />
+        )}
+
+        {activeTab === 'customers' && (
+          <CustomersView
+            customers={customers}
+            debts={debts}
+            sales={sales}
+            settings={settings}
+            onSaveCustomer={handleSaveCustomer}
+            onDeleteCustomer={handleDeleteCustomer}
+            onOpenPaymentModal={(debt) => setPayingDebt(debt)}
+            onSaveDebt={handleSaveDebt}
           />
         )}
 
@@ -309,15 +344,6 @@ export default function App() {
           />
         )}
 
-        {activeTab === 'debts' && (
-          <DebtsView
-            debts={debts}
-            settings={settings}
-            onOpenPaymentModal={(debt) => setPayingDebt(debt)}
-            onSaveDebt={handleSaveDebt}
-          />
-        )}
-
         {activeTab === 'products' && (
           <ProductsView
             products={products}
@@ -335,7 +361,7 @@ export default function App() {
         )}
       </main>
 
-      {/* Ergonomic Mobile Bottom Nav Bar */}
+      {/* Fixed Ergonomic Mobile Bottom Nav Bar */}
       <BottomNav
         activeTab={activeTab}
         onChangeTab={setActiveTab}
@@ -348,6 +374,7 @@ export default function App() {
         onClose={() => setIsNumpadOpen(false)}
         onCompleteSale={handleCompleteSale}
         soundEnabled={settings.soundEnabled}
+        customers={customers}
       />
 
       <SaleSuccessModal
@@ -371,9 +398,9 @@ export default function App() {
         isOpen={!!payingDebt}
         debt={payingDebt}
         settings={settings}
+        soundEnabled={settings.soundEnabled}
         onClose={() => setPayingDebt(null)}
         onConfirmPayment={handleConfirmDebtPayment}
-        soundEnabled={settings.soundEnabled}
       />
 
       <CloseRegisterModal
@@ -387,16 +414,14 @@ export default function App() {
         onConfirmClose={handleConfirmCloseRegister}
       />
 
-      {/* Subscription Paywall Modal (Opens on click or when trial expires) */}
       <SubscriptionModal
-        isOpen={isSubscriptionOpen || isTrialExpired}
-        user={currentUser}
+        isOpen={isSubscriptionOpen}
         onClose={() => setIsSubscriptionOpen(false)}
-        onSuccess={(updatedUser) => {
-          setCurrentUser({ ...updatedUser });
-          setIsSubscriptionOpen(false);
+        user={currentUser}
+        onSuccess={(updatedUser: UserAccount) => {
+          setCurrentUser(updatedUser);
+          refreshAllData(updatedUser);
         }}
-        isMandatoryBlock={isTrialExpired}
       />
     </div>
   );

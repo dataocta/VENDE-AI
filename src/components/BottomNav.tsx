@@ -1,7 +1,7 @@
 import React from 'react';
-import { ShoppingBag, ArrowDownRight, Wallet, BookUser, Package } from 'lucide-react';
+import { ShoppingBag, ArrowDownRight, Wallet, Users, Package } from 'lucide-react';
 
-export type TabType = 'pos' | 'expenses' | 'cash' | 'debts' | 'products';
+export type TabType = 'pos' | 'customers' | 'cash' | 'expenses' | 'products';
 
 interface BottomNavProps {
   activeTab: TabType;
@@ -15,15 +15,15 @@ export const BottomNav: React.FC<BottomNavProps> = ({
   debtsCount,
 }) => {
   const tabs: { id: TabType; label: string; icon: React.FC<{ className?: string }>; badge?: number }[] = [
-    { id: 'pos', label: 'Vender', icon: ShoppingBag },
-    { id: 'expenses', label: 'Despesas', icon: ArrowDownRight },
+    { id: 'pos', label: 'Início', icon: ShoppingBag },
+    { id: 'customers', label: 'Clientes', icon: Users, badge: debtsCount > 0 ? debtsCount : undefined },
     { id: 'cash', label: 'Caixa & Lucro', icon: Wallet },
-    { id: 'debts', label: 'A Prazo', icon: BookUser, badge: debtsCount > 0 ? debtsCount : undefined },
+    { id: 'expenses', label: 'Despesas', icon: ArrowDownRight },
     { id: 'products', label: 'Produtos', icon: Package },
   ];
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-lg border-t border-slate-200 pb-safe shadow-xs">
+    <nav className="fixed bottom-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-lg border-t border-slate-200 pb-safe shadow-[0_-4px_16px_rgba(0,0,0,0.06)]">
       <div className="max-w-md mx-auto grid grid-cols-5 items-center h-16 px-1">
         {tabs.map((tab) => {
           const Icon = tab.icon;

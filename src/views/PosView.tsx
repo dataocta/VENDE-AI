@@ -16,13 +16,15 @@ import {
   BookUser,
   AlertCircle,
 } from 'lucide-react';
-import { Product, Sale, CartItem, PaymentMethod, BusinessSettings } from '../types';
+import { Product, Sale, CartItem, PaymentMethod, BusinessSettings, Customer } from '../types';
 import { formatCurrency, formatDateBR, getPaymentMethodLabel, generateWhatsAppSaleReceipt } from '../utils/receipt';
 import { playSaleChime, playTapBeep } from '../utils/audio';
+import { SalesAnalyticsCharts } from '../components/SalesAnalyticsCharts';
 
 interface PosViewProps {
   products: Product[];
   sales: Sale[];
+  customers?: Customer[];
   settings: BusinessSettings;
   onCompleteSale: (sale: Sale) => void;
   onCancelSale: (saleId: string) => void;
@@ -33,6 +35,7 @@ interface PosViewProps {
 export const PosView: React.FC<PosViewProps> = ({
   products,
   sales,
+  customers = [],
   settings,
   onCompleteSale,
   onCancelSale,
@@ -234,6 +237,9 @@ export const PosView: React.FC<PosViewProps> = ({
           <span>DIGITAR VALOR (TECLADO NUMÉRICO)</span>
         </button>
       </div>
+
+      {/* 3. Desempenho & Gráficos: Dia Recorde, Produtos Mais Vendidos e Formas de Pagamento */}
+      <SalesAnalyticsCharts sales={sales} settings={settings} />
 
       {/* 3. Fast Pocket Catalog Header & Filter Tabs */}
       <div className="space-y-2.5">
@@ -617,11 +623,35 @@ export const PosView: React.FC<PosViewProps> = ({
               )}
 
               {/* Client info */}
-              {(paymentMethod === 'fiado' || cartTotal > 50) && (
-                <div className="space-y-2">
+              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3 space-y-2">
+                <div className="flex items-center justify-between text-xs font-semibold text-slate-700">
+                  <span>Dados do Cliente {paymentMethod === 'fiado' ? '(Obrigatório para venda a prazo)' : '(Opcional)'}</span>
+                </div>
+
+                {/* Quick customer pick suggestions */}
+                {customers && customers.length > 0 && !customerName && (
+                  <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+                    <span className="text-[10px] text-slate-500 font-medium shrink-0">Cadastrados:</span>
+                    {customers.slice(0, 5).map((c) => (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => {
+                          setCustomerName(c.name);
+                          if (c.phone) setCustomerPhone(c.phone);
+                        }}
+                        className="px-2 py-0.5 rounded-lg bg-white border border-slate-200 text-slate-700 text-[11px] font-semibold hover:border-emerald-500 shrink-0"
+                      >
+                        {c.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <input
                     type="text"
-                    placeholder="Nome do Cliente (obrigatório para venda a prazo)"
+                    placeholder="Nome do Cliente (ex: Dona Maria)"
                     value={customerName}
                     onChange={(e) => setCustomerName(e.target.value)}
                     className="w-full px-3 py-2 rounded-xl bg-white border border-slate-300 text-slate-900 text-xs focus:outline-none focus:border-emerald-500"
@@ -634,7 +664,7 @@ export const PosView: React.FC<PosViewProps> = ({
                     className="w-full px-3 py-2 rounded-xl bg-white border border-slate-300 text-slate-900 text-xs focus:outline-none focus:border-emerald-500"
                   />
                 </div>
-              )}
+              </div>
 
               {/* Submit Button */}
               <button

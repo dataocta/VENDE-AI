@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { X, Delete, Check, Banknote, QrCode, CreditCard, BookUser, User } from 'lucide-react';
-import { PaymentMethod, Sale } from '../types';
+import { PaymentMethod, Sale, Customer } from '../types';
 import { formatCurrency } from '../utils/receipt';
 import { playSaleChime, playTapBeep } from '../utils/audio';
 
@@ -10,6 +10,7 @@ interface NumpadSaleModalProps {
   onCompleteSale: (sale: Sale) => void;
   soundEnabled: boolean;
   defaultCustomerName?: string;
+  customers?: Customer[];
 }
 
 export const NumpadSaleModal: React.FC<NumpadSaleModalProps> = ({
@@ -18,6 +19,7 @@ export const NumpadSaleModal: React.FC<NumpadSaleModalProps> = ({
   onCompleteSale,
   soundEnabled,
   defaultCustomerName,
+  customers = [],
 }) => {
   // Amount entered as integer cents (e.g. 1550 = R$ 15,50)
   const [cents, setCents] = useState<number>(0);
@@ -295,30 +297,51 @@ export const NumpadSaleModal: React.FC<NumpadSaleModalProps> = ({
           )}
 
           {/* Customer / Fiado details */}
-          {(paymentMethod === 'fiado' || totalAmount > 50) && (
-            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3 space-y-2">
-              <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-700">
+          <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3 space-y-2">
+            <div className="flex items-center justify-between text-xs font-semibold text-slate-700">
+              <span className="flex items-center gap-1.5">
                 <User className="w-3.5 h-3.5 text-emerald-600" />
                 <span>Dados do Cliente {paymentMethod === 'fiado' ? '(Obrigatório para venda a prazo)' : '(Opcional)'}</span>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                <input
-                  type="text"
-                  placeholder="Nome do Cliente (ex: Seu José da Padaria)"
-                  value={customerName}
-                  onChange={(e) => setCustomerName(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-white border border-slate-300 text-slate-900 text-xs focus:outline-none focus:border-emerald-500"
-                />
-                <input
-                  type="tel"
-                  placeholder="WhatsApp (ex: 11999998888)"
-                  value={customerPhone}
-                  onChange={(e) => setCustomerPhone(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-white border border-slate-300 text-slate-900 text-xs focus:outline-none focus:border-emerald-500"
-                />
-              </div>
+              </span>
             </div>
-          )}
+
+            {/* Quick customer pick suggestions */}
+            {customers && customers.length > 0 && !customerName && (
+              <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+                <span className="text-[10px] text-slate-500 font-medium shrink-0">Cadastrados:</span>
+                {customers.slice(0, 5).map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => {
+                      setCustomerName(c.name);
+                      if (c.phone) setCustomerPhone(c.phone);
+                    }}
+                    className="px-2 py-0.5 rounded-lg bg-white border border-slate-200 text-slate-700 text-[11px] font-semibold hover:border-emerald-500 shrink-0"
+                  >
+                    {c.name}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <input
+                type="text"
+                placeholder="Nome do Cliente (ex: Dona Maria)"
+                value={customerName}
+                onChange={(e) => setCustomerName(e.target.value)}
+                className="w-full px-3 py-2 rounded-xl bg-white border border-slate-300 text-slate-900 text-xs focus:outline-none focus:border-emerald-500"
+              />
+              <input
+                type="tel"
+                placeholder="WhatsApp (ex: 11999998888)"
+                value={customerPhone}
+                onChange={(e) => setCustomerPhone(e.target.value)}
+                className="w-full px-3 py-2 rounded-xl bg-white border border-slate-300 text-slate-900 text-xs focus:outline-none focus:border-emerald-500"
+              />
+            </div>
+          </div>
 
           {/* Quick Optional Note */}
           <div>

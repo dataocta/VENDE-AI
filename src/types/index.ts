@@ -60,6 +60,15 @@ export interface Expense {
   paymentMethod: 'dinheiro' | 'pix' | 'cartao';
 }
 
+export interface Customer {
+  id: string;
+  name: string;
+  phone: string;
+  addressOrSpot?: string;
+  notes?: string;
+  createdAt: string;
+}
+
 export interface CustomerDebt {
   id: string;
   name: string;
