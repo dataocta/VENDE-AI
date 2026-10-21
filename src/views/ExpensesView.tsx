@@ -10,10 +10,6 @@ import {
   Percent,
   Wrench,
   MoreHorizontal,
-  Banknote,
-  QrCode,
-  CreditCard,
-  TrendingDown,
 } from 'lucide-react';
 import { Expense, ExpenseCategory } from '../types';
 import { formatCurrency, formatDateBR } from '../utils/receipt';
@@ -73,32 +69,32 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
   return (
     <div className="space-y-4 pb-28">
       {/* 1. Main Expense Header Card */}
-      <div className="bg-slate-900 border border-slate-800 rounded-3xl p-4 shadow-sm">
+      <div className="bg-white border border-slate-200 rounded-3xl p-4 shadow-xs">
         <div className="flex items-center justify-between mb-2">
-          <span className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-            <ArrowDownRight className="w-3.5 h-3.5 text-rose-400" />
-            <span>Despesas da Rua Hoje</span>
+          <span className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+            <ArrowDownRight className="w-3.5 h-3.5 text-rose-600" />
+            <span>Despesas de Hoje</span>
           </span>
-          <span className="text-xs text-slate-400">
-            {todayExpenses.length} saídas registradas
+          <span className="text-xs text-slate-500 font-medium">
+            {todayExpenses.length} lançamentos
           </span>
         </div>
 
         {/* Big total */}
         <div className="flex items-baseline justify-between py-1">
           <div>
-            <div className="text-3xl sm:text-4xl font-black text-rose-400 font-mono-numbers tracking-tight">
+            <div className="text-3xl sm:text-4xl font-black text-rose-600 font-mono-numbers tracking-tight">
               {formatCurrency(todayExpensesTotal)}
             </div>
-            <div className="text-xs text-slate-400 mt-1">
+            <div className="text-xs text-slate-500 mt-1">
               Gasto total nas ruas durante o dia
             </div>
           </div>
 
           {todaySalesTotal > 0 && (
             <div className="text-right">
-              <span className="text-xs text-slate-400 block font-medium">Impacto no Faturamento</span>
-              <span className={`text-xl font-bold font-mono-numbers ${expenseRatio > 35 ? 'text-amber-400' : 'text-slate-200'}`}>
+              <span className="text-xs text-slate-500 block font-medium">Impacto no Caixa</span>
+              <span className={`text-xl font-bold font-mono-numbers ${expenseRatio > 35 ? 'text-amber-600' : 'text-slate-700'}`}>
                 {expenseRatio}%
               </span>
             </div>
@@ -107,23 +103,22 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
 
         {/* Category Breakdown Bar */}
         {todayExpenses.length > 0 && (
-          <div className="mt-4 pt-3 border-t border-slate-800 space-y-2">
-            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">
+          <div className="mt-4 pt-3 border-t border-slate-100 space-y-2">
+            <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">
               Distribuição dos Gastos de Hoje
             </span>
             <div className="grid grid-cols-2 gap-2 text-xs">
               {Object.entries(categoryTotals).map(([cat, total]) => {
                 const Icon = categoryIcons[cat as ExpenseCategory] || MoreHorizontal;
                 const label = categoryLabels[cat as ExpenseCategory] || cat;
-                const pct = todayExpensesTotal > 0 ? Math.round((total / todayExpensesTotal) * 100) : 0;
 
                 return (
-                  <div key={cat} className="bg-slate-950/70 border border-slate-800/80 rounded-xl p-2 flex items-center justify-between">
+                  <div key={cat} className="bg-slate-50 border border-slate-200 rounded-xl p-2 flex items-center justify-between">
                     <div className="flex items-center gap-1.5 min-w-0 pr-1">
-                      <Icon className="w-3.5 h-3.5 text-rose-400 shrink-0" />
-                      <span className="truncate text-slate-300 font-medium">{label}</span>
+                      <Icon className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                      <span className="truncate text-slate-700 font-medium">{label}</span>
                     </div>
-                    <span className="font-mono-numbers font-bold text-slate-200 shrink-0">
+                    <span className="font-mono-numbers font-bold text-slate-900 shrink-0">
                       {formatCurrency(total)}
                     </span>
                   </div>
@@ -138,9 +133,9 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
       <button
         type="button"
         onClick={onOpenNewExpense}
-        className="w-full min-h-[54px] rounded-2xl bg-gradient-to-r from-rose-600 via-rose-500 to-amber-600 text-white font-black text-sm flex items-center justify-center gap-2 shadow-lg shadow-rose-950/40 touch-press transition-all hover:brightness-105 active:scale-[0.98]"
+        className="w-full min-h-[50px] rounded-2xl bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-sm flex items-center justify-center gap-2 shadow-xs touch-press transition-colors"
       >
-        <Plus className="w-5 h-5 stroke-[3]" />
+        <Plus className="w-4 h-4 stroke-[3]" />
         <span>LANÇAR NOVA DESPESA NA RUA</span>
       </button>
 
@@ -151,8 +146,8 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
           onClick={() => setFilterCategory('todos')}
           className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-colors touch-press ${
             filterCategory === 'todos'
-              ? 'bg-slate-200 text-slate-950 font-bold'
-              : 'bg-slate-900 border border-slate-800 text-slate-400 hover:text-slate-200'
+              ? 'bg-slate-900 text-white font-bold'
+              : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
           }`}
         >
           Todas as Despesas
@@ -164,8 +159,8 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
             onClick={() => setFilterCategory(cat)}
             className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-colors touch-press ${
               filterCategory === cat
-                ? 'bg-slate-200 text-slate-950 font-bold'
-                : 'bg-slate-900 border border-slate-800 text-slate-400 hover:text-slate-200'
+                ? 'bg-slate-900 text-white font-bold'
+                : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
             }`}
           >
             {categoryLabels[cat as ExpenseCategory]}
@@ -176,29 +171,29 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
       {/* 4. Expenses List */}
       <div className="space-y-2">
         {expenses.length === 0 ? (
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 text-center space-y-3">
-            <div className="w-12 h-12 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-400 flex items-center justify-center mx-auto">
+          <div className="bg-white border border-slate-200 rounded-3xl p-6 text-center space-y-3 shadow-xs">
+            <div className="w-12 h-12 rounded-2xl bg-rose-50 border border-rose-200 text-rose-600 flex items-center justify-center mx-auto">
               <ArrowDownRight className="w-6 h-6" />
             </div>
             <div>
-              <h4 className="text-sm font-bold text-slate-100">
+              <h4 className="text-sm font-bold text-slate-900">
                 Nenhuma despesa lançada hoje
               </h4>
-              <p className="text-xs text-slate-400 max-w-xs mx-auto mt-1">
+              <p className="text-xs text-slate-500 max-w-xs mx-auto mt-1">
                 Anote cada saída de dinheiro na rua (combustível, almoço, embalagens, taxas) para calcular exatamente quanto sobrou no seu bolso.
               </p>
             </div>
             <button
               type="button"
               onClick={onOpenNewExpense}
-              className="px-4 py-2.5 rounded-xl bg-rose-500 hover:bg-rose-400 text-white font-black text-xs inline-flex items-center gap-1.5 touch-press transition-colors"
+              className="px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs inline-flex items-center gap-1.5 touch-press transition-colors shadow-xs"
             >
               <Plus className="w-4 h-4 stroke-[3]" />
               <span>REGISTRAR PRIMEIRA DESPESA</span>
             </button>
           </div>
         ) : filteredExpenses.length === 0 ? (
-          <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-6 text-center text-slate-400 text-xs">
+          <div className="bg-white border border-slate-200 rounded-2xl p-6 text-center text-slate-500 text-xs shadow-xs">
             Nenhuma despesa encontrada nesta categoria.
           </div>
         ) : (
@@ -209,28 +204,28 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
             return (
               <div
                 key={exp.id}
-                className="bg-slate-900 border border-slate-800 rounded-2xl p-3 flex items-center justify-between gap-3"
+                className="bg-white border border-slate-200 rounded-2xl p-3 flex items-center justify-between gap-3 shadow-xs"
               >
                 <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-10 h-10 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 flex items-center justify-center shrink-0">
+                  <div className="w-10 h-10 rounded-xl bg-rose-50 border border-rose-200 text-rose-600 flex items-center justify-center shrink-0">
                     <Icon className="w-5 h-5" />
                   </div>
                   <div className="min-w-0">
-                    <div className="font-bold text-slate-100 text-xs sm:text-sm truncate">
+                    <div className="font-bold text-slate-900 text-xs sm:text-sm truncate">
                       {exp.description}
                     </div>
-                    <div className="flex items-center gap-1.5 text-xs text-slate-400 mt-0.5 font-medium">
+                    <div className="flex items-center gap-1.5 text-xs text-slate-500 mt-0.5 font-medium">
                       <span>{label}</span>
-                      <span aria-hidden="true" className="text-slate-600">·</span>
+                      <span aria-hidden="true" className="text-slate-300">·</span>
                       <span className="capitalize">{exp.paymentMethod}</span>
-                      <span aria-hidden="true" className="text-slate-600">·</span>
+                      <span aria-hidden="true" className="text-slate-300">·</span>
                       <span>{formatDateBR(exp.date)}</span>
                     </div>
                   </div>
                 </div>
 
                 <div className="flex items-center gap-2 shrink-0">
-                  <span className="text-sm sm:text-base font-extrabold text-rose-400 font-mono-numbers">
+                  <span className="text-sm sm:text-base font-extrabold text-rose-600 font-mono-numbers">
                     -{formatCurrency(exp.amount)}
                   </span>
                   <button
@@ -241,7 +236,7 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
                       }
                     }}
                     title="Excluir despesa"
-                    className="w-8 h-8 rounded-lg bg-slate-800 text-slate-400 hover:text-rose-400 flex items-center justify-center transition-colors"
+                    className="w-8 h-8 rounded-lg bg-slate-100 text-slate-400 hover:text-rose-600 flex items-center justify-center transition-colors"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>

@@ -252,8 +252,8 @@ export default function App() {
 
   return (
     <div
-      className={`min-h-screen text-slate-100 flex flex-col transition-colors ${
-        settings.highContrastMode ? 'bg-black contrast-125' : 'bg-slate-950'
+      className={`min-h-screen text-slate-900 flex flex-col transition-colors ${
+        settings.highContrastMode ? 'bg-white contrast-125' : 'bg-slate-50'
       }`}
     >
       {/* 7-Day Free Trial / Subscription Banner */}

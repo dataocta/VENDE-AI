@@ -103,9 +103,12 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
     const costPrice = parseFloat(costStr.replace(',', '.')) || 0;
     const stock = parseInt(stockStr, 10) || 0;
 
-    if (!name.trim() || price <= 0) return;
+    if (!name.trim() || price <= 0) {
+      alert('Informe o nome e um preço de venda válido!');
+      return;
+    }
 
-    const newProd: Product = {
+    const prodToSave: Product = {
       id: editingProduct ? editingProduct.id : `prod_${Date.now()}`,
       name: name.trim(),
       category: category.trim() || 'Geral',
@@ -115,25 +118,24 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
       unit,
     };
 
-    onSaveProduct(newProd);
+    onSaveProduct(prodToSave);
     setIsAddOpen(false);
   };
 
   const handleSaveSettings = (e: React.FormEvent) => {
     e.preventDefault();
-    const dailyGoal = parseFloat(dailyGoalStr.replace(',', '.')) || 0;
-    const updated: BusinessSettings = {
+    const goal = parseFloat(dailyGoalStr.replace(',', '.')) || 0;
+    onUpdateSettings({
       ...settings,
       businessName: bName.trim(),
       sellerName: sName.trim(),
       pixKey: pix.trim(),
       pixKeyType: pixType,
       phone: phone.trim(),
-      dailyGoal,
-    };
-    onUpdateSettings(updated);
+      dailyGoal: goal,
+    });
     setSettingsSaved(true);
-    setTimeout(() => setSettingsSaved(false), 2500);
+    setTimeout(() => setSettingsSaved(false), 2000);
   };
 
   const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -152,25 +154,25 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
   return (
     <div className="space-y-4 pb-28">
       {/* Sub-Tab Selector */}
-      <div className="grid grid-cols-2 p-1 bg-slate-900 border border-slate-800 rounded-2xl">
+      <div className="grid grid-cols-2 p-1 bg-slate-100 border border-slate-200 rounded-2xl">
         <button
           type="button"
           onClick={() => setActiveSubTab('products')}
           className={`py-2 text-xs font-bold rounded-xl transition-all ${
             activeSubTab === 'products'
-              ? 'bg-slate-800 text-slate-100 shadow-sm'
-              : 'text-slate-400 hover:text-slate-200'
+              ? 'bg-white text-slate-900 shadow-xs'
+              : 'text-slate-500 hover:text-slate-900'
           }`}
         >
-          Catálogo &amp; Margem ({products.length})
+          Catálogo &amp; Preços ({products.length})
         </button>
         <button
           type="button"
           onClick={() => setActiveSubTab('settings')}
           className={`py-2 text-xs font-bold rounded-xl transition-all ${
             activeSubTab === 'settings'
-              ? 'bg-slate-800 text-slate-100 shadow-sm'
-              : 'text-slate-400 hover:text-slate-200'
+              ? 'bg-white text-slate-900 shadow-xs'
+              : 'text-slate-500 hover:text-slate-900'
           }`}
         >
           Conta, Plano &amp; Ajustes
@@ -183,28 +185,28 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
           <button
             type="button"
             onClick={openNewModal}
-            className="w-full min-h-[50px] rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-sm flex items-center justify-center gap-2 shadow-lg touch-press transition-all active:scale-[0.98]"
+            className="w-full min-h-[50px] rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-sm flex items-center justify-center gap-2 shadow-xs touch-press transition-colors"
           >
             <Plus className="w-5 h-5 stroke-[2.5]" />
-            <span>+ CADASTRAR NOVO PRODUTO NA RUA</span>
+            <span>+ CADASTRAR NOVO PRODUTO</span>
           </button>
 
           {/* Products List with Profit Margin Indicator or Clean State */}
           {products.length === 0 ? (
-            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 text-center space-y-3">
-              <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto">
+            <div className="bg-white border border-slate-200 rounded-3xl p-6 text-center space-y-3 shadow-xs">
+              <div className="w-12 h-12 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-600 flex items-center justify-center mx-auto">
                 <Package className="w-6 h-6" />
               </div>
               <div>
-                <h4 className="text-sm font-bold text-slate-100">Nenhum produto cadastrado ainda</h4>
-                <p className="text-xs text-slate-400 max-w-xs mx-auto mt-1">
-                  Cadastre seus produtos, salgados, bebidas ou mercadorias com o preço de venda e custo para calcular sua margem de lucro na rua.
+                <h4 className="text-sm font-bold text-slate-900">Nenhum produto cadastrado ainda</h4>
+                <p className="text-xs text-slate-500 max-w-xs mx-auto mt-1">
+                  Cadastre seus produtos com o preço de venda e custo para acompanhar seus ganhos em cada item vendido.
                 </p>
               </div>
               <button
                 type="button"
                 onClick={openNewModal}
-                className="px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs inline-flex items-center gap-1.5 touch-press transition-colors"
+                className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs inline-flex items-center gap-1.5 touch-press transition-colors shadow-xs"
               >
                 <Plus className="w-4 h-4 stroke-[3]" />
                 <span>CADASTRAR PRIMEIRO PRODUTO</span>
@@ -213,101 +215,100 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
           ) : (
             <div className="space-y-2">
               {products.map((p) => {
-              const unitProfit = p.price - (p.costPrice || 0);
-              const marginPercent = p.price > 0 ? Math.round((unitProfit / p.price) * 100) : 0;
-              const isLowStock = p.stock <= 5;
+                const unitProfit = p.price - (p.costPrice || 0);
+                const marginPercent = p.price > 0 ? Math.round((unitProfit / p.price) * 100) : 0;
+                const isLowStock = p.stock <= 5;
 
-              return (
-                <div
-                  key={p.id}
-                  className="bg-slate-900 border border-slate-800 rounded-2xl p-3.5 space-y-2.5"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">
-                        {p.category}
-                      </span>
-                      <h4 className="font-bold text-slate-100 text-sm truncate">
-                        {p.name}
-                      </h4>
-                      <div className="flex items-center gap-2 text-xs text-slate-400 mt-1">
-                        <span>
-                          Estoque:{' '}
-                          <strong className={isLowStock ? 'text-amber-400' : 'text-slate-200'}>
-                            {p.stock} {p.unit || 'un'}
-                          </strong>
+                return (
+                  <div
+                    key={p.id}
+                    className="bg-white border border-slate-200 rounded-2xl p-3.5 space-y-2.5 shadow-xs"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider block">
+                          {p.category}
                         </span>
-                        <span aria-hidden="true" className="text-slate-600">·</span>
-                        <span>Custo: {formatCurrency(p.costPrice || 0)}</span>
+                        <h4 className="font-bold text-slate-900 text-sm truncate">
+                          {p.name}
+                        </h4>
+                        <div className="flex items-center gap-2 text-xs text-slate-500 mt-1">
+                          <span>
+                            Estoque:{' '}
+                            <strong className={isLowStock ? 'text-amber-600' : 'text-slate-800'}>
+                              {p.stock} {p.unit || 'un'}
+                            </strong>
+                          </span>
+                          <span aria-hidden="true" className="text-slate-300">·</span>
+                          <span>Custo: {formatCurrency(p.costPrice || 0)}</span>
+                        </div>
+                      </div>
+
+                      <div className="text-right shrink-0">
+                        <span className="text-xs text-slate-500 block font-medium">Preço Venda</span>
+                        <span className="text-lg font-black text-emerald-700 font-mono-numbers">
+                          {formatCurrency(p.price)}
+                        </span>
                       </div>
                     </div>
 
-                    <div className="text-right shrink-0">
-                      <span className="text-xs text-slate-400 block font-medium">Preço Venda</span>
-                      <span className="text-lg font-black text-emerald-400 font-mono-numbers">
-                        {formatCurrency(p.price)}
-                      </span>
+                    {/* Profit Margin Strip */}
+                    <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-1.5 text-slate-600">
+                        <TrendingUp className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>
+                          Lucro unitário: <strong className="text-emerald-700 font-mono-numbers">{formatCurrency(unitProfit)}</strong> ({marginPercent}%)
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => openEditModal(p)}
+                          className="w-8 h-8 rounded-lg bg-slate-100 text-slate-600 hover:text-slate-900 flex items-center justify-center transition-colors"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (confirm(`Excluir o produto "${p.name}"?`)) {
+                              onDeleteProduct(p.id);
+                            }
+                          }}
+                          className="w-8 h-8 rounded-lg bg-slate-100 text-slate-400 hover:text-rose-600 flex items-center justify-center transition-colors"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
                   </div>
-
-                  {/* Profit Margin Strip */}
-                  <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-xs">
-                    <div className="flex items-center gap-1.5 text-slate-300">
-                      <TrendingUp className="w-3.5 h-3.5 text-emerald-400" />
-                      <span>
-                        Lucro unitário: <strong className="text-emerald-400 font-mono-numbers">{formatCurrency(unitProfit)}</strong> ({marginPercent}%)
-                      </span>
-                    </div>
-
-                    <div className="flex items-center gap-1">
-                      <button
-                        type="button"
-                        onClick={() => openEditModal(p)}
-                        className="w-8 h-8 rounded-lg bg-slate-800 text-slate-300 hover:text-white flex items-center justify-center transition-colors"
-                      >
-                        <Edit2 className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (confirm(`Excluir o produto "${p.name}"?`)) {
-                            onDeleteProduct(p.id);
-                          }
-                        }}
-                        className="w-8 h-8 rounded-lg bg-slate-800 text-slate-400 hover:text-rose-400 flex items-center justify-center transition-colors"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-    ) : (
-      /* Settings Sub-Tab */
-      <div className="space-y-4">
-          
+                );
+              })}
+            </div>
+          )}
+        </div>
+      ) : (
+        /* Settings Sub-Tab */
+        <div className="space-y-4">
           {/* User Account & 7-Day Trial Status Card */}
           {user && trialInfo && (
-            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 space-y-3.5">
+            <div className="bg-white border border-slate-200 rounded-3xl p-5 space-y-3.5 shadow-xs">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <div className="w-9 h-9 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center">
+                  <div className="w-9 h-9 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 flex items-center justify-center">
                     <User className="w-4 h-4" />
                   </div>
                   <div>
-                    <h3 className="text-sm font-bold text-slate-100">{user.name}</h3>
-                    <p className="text-xs text-slate-400">{user.email}</p>
+                    <h3 className="text-sm font-bold text-slate-900">{user.name}</h3>
+                    <p className="text-xs text-slate-500">{user.email}</p>
                   </div>
                 </div>
 
                 <button
                   type="button"
                   onClick={onLogout}
-                  className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-750 text-rose-400 font-medium text-xs flex items-center gap-1 border border-slate-700 transition-colors"
+                  className="px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-rose-600 font-medium text-xs flex items-center gap-1 border border-slate-200 transition-colors"
                 >
                   <LogOut className="w-3.5 h-3.5" />
                   <span>Sair</span>
@@ -315,16 +316,16 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
               </div>
 
               {/* Subscription Status Details */}
-              <div className="bg-slate-950 border border-slate-800 rounded-2xl p-4 space-y-2">
+              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-2">
                 <div className="flex items-center justify-between text-xs">
-                  <span className="text-slate-400">Status do Seu Plano:</span>
+                  <span className="text-slate-500">Status do Seu Plano:</span>
                   <span
                     className={`font-bold font-mono-numbers ${
                       user.subscriptionStatus === 'active'
-                        ? 'text-emerald-400'
+                        ? 'text-emerald-700'
                         : trialInfo.isExpired
-                        ? 'text-rose-400'
-                        : 'text-amber-400'
+                        ? 'text-rose-600'
+                        : 'text-amber-700'
                     }`}
                   >
                     {user.subscriptionStatus === 'active'
@@ -335,9 +336,9 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
                   </span>
                 </div>
 
-                <div className="flex items-center justify-between text-xs text-slate-400 pt-1 border-t border-slate-800/80">
+                <div className="flex items-center justify-between text-xs text-slate-500 pt-1 border-t border-slate-200">
                   <span>Mensalidade:</span>
-                  <span className="font-mono-numbers text-slate-200 font-semibold">
+                  <span className="font-mono-numbers text-slate-900 font-semibold">
                     R$ 15,97 / mês
                   </span>
                 </div>
@@ -346,7 +347,7 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
                   <button
                     type="button"
                     onClick={onOpenSubscriptionModal}
-                    className="w-full mt-2 min-h-[42px] rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-slate-950 font-black text-xs flex items-center justify-center gap-1.5 shadow-md touch-press transition-all hover:brightness-105"
+                    className="w-full mt-2 min-h-[42px] rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs flex items-center justify-center gap-1.5 shadow-xs touch-press transition-colors"
                   >
                     <CreditCard className="w-3.5 h-3.5 stroke-[2.5]" />
                     <span>ATIVAR ASSINATURA (R$ 15,97/MÊS)</span>
@@ -357,14 +358,14 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
           )}
 
           {/* Business & Pix Settings Form */}
-          <form onSubmit={handleSaveSettings} className="bg-slate-900 border border-slate-800 rounded-3xl p-5 space-y-4">
-            <h3 className="text-sm font-bold text-slate-200 flex items-center gap-1.5">
-              <Sliders className="w-4 h-4 text-emerald-400" />
-              <span>Dados do Negócio de Rua &amp; Pix</span>
+          <form onSubmit={handleSaveSettings} className="bg-white border border-slate-200 rounded-3xl p-5 space-y-4 shadow-xs">
+            <h3 className="text-sm font-bold text-slate-900 flex items-center gap-1.5">
+              <Sliders className="w-4 h-4 text-emerald-600" />
+              <span>Dados do Negócio &amp; Chave Pix</span>
             </h3>
 
             <div>
-              <label className="text-xs font-semibold text-slate-400 block mb-1">
+              <label className="text-xs font-semibold text-slate-600 block mb-1">
                 Nome Fantasia da Barraca / Negócio
               </label>
               <input
@@ -372,13 +373,13 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
                 value={bName}
                 onChange={(e) => setBName(e.target.value)}
                 placeholder="Ex: Pastel &amp; Caldo de Cana da Esquina"
-                className="w-full px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-slate-100 text-xs focus:outline-none focus:border-emerald-500"
+                className="w-full px-3 py-2.5 rounded-xl bg-white border border-slate-300 text-slate-900 text-xs focus:outline-none focus:border-emerald-500"
               />
             </div>
 
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <label className="text-xs font-semibold text-slate-400 block mb-1">
+                <label className="text-xs font-semibold text-slate-600 block mb-1">
                   Seu Nome (Vendedor)
                 </label>
                 <input
@@ -386,12 +387,12 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
                   value={sName}
                   onChange={(e) => setSName(e.target.value)}
                   placeholder="Ex: Carlos Oliveira"
-                  className="w-full px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-slate-100 text-xs focus:outline-none focus:border-emerald-500"
+                  className="w-full px-3 py-2.5 rounded-xl bg-white border border-slate-300 text-slate-900 text-xs focus:outline-none focus:border-emerald-500"
                 />
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-slate-400 block mb-1">
+                <label className="text-xs font-semibold text-slate-600 block mb-1">
                   Meta Diária de Vendas (R$)
                 </label>
                 <input
@@ -400,14 +401,14 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
                   value={dailyGoalStr}
                   onChange={(e) => setDailyGoalStr(e.target.value)}
                   placeholder="Ex: 500,00"
-                  className="w-full px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-emerald-400 font-bold font-mono-numbers text-xs focus:outline-none focus:border-emerald-500"
+                  className="w-full px-3 py-2.5 rounded-xl bg-white border border-slate-300 text-emerald-700 font-bold font-mono-numbers text-xs focus:outline-none focus:border-emerald-500"
                 />
               </div>
             </div>
 
             <div className="grid grid-cols-3 gap-2">
               <div className="col-span-2">
-                <label className="text-xs font-semibold text-slate-400 block mb-1">
+                <label className="text-xs font-semibold text-slate-600 block mb-1">
                   Sua Chave Pix (Sai nos Recibos e Cobranças)
                 </label>
                 <input
@@ -415,18 +416,18 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
                   value={pix}
                   onChange={(e) => setPix(e.target.value)}
                   placeholder="Telefone, CPF ou e-mail"
-                  className="w-full px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-slate-100 text-xs focus:outline-none focus:border-emerald-500"
+                  className="w-full px-3 py-2.5 rounded-xl bg-white border border-slate-300 text-slate-900 text-xs focus:outline-none focus:border-emerald-500"
                 />
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-slate-400 block mb-1">
+                <label className="text-xs font-semibold text-slate-600 block mb-1">
                   Tipo da Chave
                 </label>
                 <select
                   value={pixType}
                   onChange={(e) => setPixType(e.target.value as any)}
-                  className="w-full px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-slate-100 text-xs focus:outline-none"
+                  className="w-full px-3 py-2.5 rounded-xl bg-white border border-slate-300 text-slate-900 text-xs focus:outline-none focus:border-emerald-500"
                 >
                   <option value="telefone">Telefone</option>
                   <option value="cpf">CPF</option>
@@ -438,12 +439,12 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
 
             <button
               type="submit"
-              className="w-full min-h-[46px] rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-1.5 touch-press transition-all"
+              className="w-full min-h-[46px] rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 touch-press transition-colors shadow-xs"
             >
               {settingsSaved ? (
                 <>
                   <Check className="w-4 h-4" />
-                  <span>Configurações Salvas!</span>
+                  <span>Configurações Salvas com Sucesso!</span>
                 </>
               ) : (
                 <span>Salvar Configurações</span>
@@ -452,27 +453,27 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
           </form>
 
           {/* Backup & Data Integrity */}
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 space-y-3">
-            <h3 className="text-sm font-bold text-slate-200 flex items-center gap-1.5">
-              <ShieldCheck className="w-4 h-4 text-emerald-400" />
+          <div className="bg-white border border-slate-200 rounded-3xl p-5 space-y-3 shadow-xs">
+            <h3 className="text-sm font-bold text-slate-900 flex items-center gap-1.5">
+              <ShieldCheck className="w-4 h-4 text-emerald-600" />
               <span>Backup e Segurança dos Seus Dados</span>
             </h3>
-            <p className="text-xs text-slate-400">
-              Seus dados ficam 100% gravados na memória do seu celular e funcionam mesmo sem sinal ou internet na rua.
+            <p className="text-xs text-slate-500">
+              Seus dados ficam 100% gravados com segurança no seu aparelho e funcionam mesmo sem sinal ou internet.
             </p>
 
             <div className="grid grid-cols-2 gap-2 pt-1">
               <button
                 type="button"
                 onClick={onExportData}
-                className="min-h-[44px] rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs flex items-center justify-center gap-1.5 border border-slate-700 transition-colors"
+                className="min-h-[44px] rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs flex items-center justify-center gap-1.5 border border-slate-200 transition-colors"
               >
-                <Download className="w-3.5 h-3.5 text-emerald-400" />
+                <Download className="w-3.5 h-3.5 text-emerald-600" />
                 <span>Exportar Backup (JSON)</span>
               </button>
 
-              <label className="min-h-[44px] rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs flex items-center justify-center gap-1.5 border border-slate-700 transition-colors cursor-pointer">
-                <Upload className="w-3.5 h-3.5 text-amber-400" />
+              <label className="min-h-[44px] rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs flex items-center justify-center gap-1.5 border border-slate-200 transition-colors cursor-pointer">
+                <Upload className="w-3.5 h-3.5 text-amber-600" />
                 <span>Importar Backup</span>
                 <input
                   type="file"
@@ -490,7 +491,7 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
                   onResetData();
                 }
               }}
-              className="w-full text-xs text-rose-400/80 hover:text-rose-300 py-1.5 flex items-center justify-center gap-1.5 transition-colors"
+              className="w-full text-xs text-rose-600 hover:text-rose-700 py-1.5 flex items-center justify-center gap-1.5 transition-colors font-medium"
             >
               <Trash2 className="w-3 h-3" />
               <span>Zerar meus dados e reiniciar base limpa</span>
@@ -501,19 +502,19 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
 
       {/* Product Add/Edit Modal */}
       {isAddOpen && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/80 backdrop-blur-sm p-0 sm:p-4">
-          <div className="w-full sm:max-w-md bg-slate-900 border border-slate-800 rounded-t-3xl sm:rounded-3xl shadow-2xl flex flex-col max-h-[92vh] overflow-y-auto no-scrollbar pb-safe">
-            <div className="sticky top-0 bg-slate-900/95 backdrop-blur-md px-5 pt-4 pb-2 border-b border-slate-800 flex items-center justify-between z-10">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-xs p-0 sm:p-4">
+          <div className="w-full sm:max-w-md bg-white border border-slate-200 rounded-t-3xl sm:rounded-3xl shadow-2xl flex flex-col max-h-[92vh] overflow-y-auto no-scrollbar pb-safe">
+            <div className="sticky top-0 bg-white/95 backdrop-blur-md px-5 pt-4 pb-2 border-b border-slate-200 flex items-center justify-between z-10">
               <div>
-                <h2 className="text-base font-bold text-slate-100">
-                  {editingProduct ? 'Editar Produto' : 'Cadastrar Produto na Rua'}
+                <h2 className="text-base font-bold text-slate-900">
+                  {editingProduct ? 'Editar Produto' : 'Cadastrar Produto'}
                 </h2>
-                <p className="text-xs text-slate-400">Preencha o preço e custo para ver a margem</p>
+                <p className="text-xs text-slate-500">Preencha o preço e custo para acompanhar sua margem</p>
               </div>
               <button
                 type="button"
                 onClick={() => setIsAddOpen(false)}
-                className="w-8 h-8 rounded-full bg-slate-800 text-slate-300 flex items-center justify-center"
+                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -521,7 +522,7 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
 
             <form onSubmit={handleSaveProductForm} className="p-4 space-y-3.5">
               <div>
-                <label className="text-xs font-semibold text-slate-400 block mb-1">
+                <label className="text-xs font-semibold text-slate-600 block mb-1">
                   Nome do Produto *
                 </label>
                 <input
@@ -530,13 +531,13 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
                   placeholder="Ex: Água Mineral c/ Gás 500ml"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  className="w-full px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-slate-100 text-xs focus:outline-none focus:border-emerald-500"
+                  className="w-full px-3 py-2.5 rounded-xl bg-white border border-slate-300 text-slate-900 text-xs focus:outline-none focus:border-emerald-500"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="text-xs font-semibold text-slate-400 block mb-1">
+                  <label className="text-xs font-semibold text-slate-600 block mb-1">
                     Categoria
                   </label>
                   <input
@@ -544,18 +545,18 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
                     placeholder="Bebidas, Lanches, etc"
                     value={category}
                     onChange={(e) => setCategory(e.target.value)}
-                    className="w-full px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-slate-100 text-xs focus:outline-none focus:border-emerald-500"
+                    className="w-full px-3 py-2.5 rounded-xl bg-white border border-slate-300 text-slate-900 text-xs focus:outline-none focus:border-emerald-500"
                   />
                 </div>
 
                 <div>
-                  <label className="text-xs font-semibold text-slate-400 block mb-1">
+                  <label className="text-xs font-semibold text-slate-600 block mb-1">
                     Unidade de Medida
                   </label>
                   <select
                     value={unit}
                     onChange={(e) => setUnit(e.target.value)}
-                    className="w-full px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-slate-100 text-xs focus:outline-none"
+                    className="w-full px-3 py-2.5 rounded-xl bg-white border border-slate-300 text-slate-900 text-xs focus:outline-none focus:border-emerald-500"
                   >
                     <option value="un">un (Unidade)</option>
                     <option value="kg">kg (Quilo)</option>
@@ -568,7 +569,7 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="text-xs font-semibold text-slate-400 block mb-1">
+                  <label className="text-xs font-semibold text-slate-600 block mb-1">
                     Preço de Venda (R$) *
                   </label>
                   <input
@@ -578,12 +579,12 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
                     placeholder="Ex: 5,00"
                     value={priceStr}
                     onChange={(e) => setPriceStr(e.target.value)}
-                    className="w-full px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-emerald-400 font-bold font-mono-numbers text-xs focus:outline-none focus:border-emerald-500"
+                    className="w-full px-3 py-2.5 rounded-xl bg-white border border-slate-300 text-emerald-700 font-bold font-mono-numbers text-xs focus:outline-none focus:border-emerald-500"
                   />
                 </div>
 
                 <div>
-                  <label className="text-xs font-semibold text-slate-400 block mb-1">
+                  <label className="text-xs font-semibold text-slate-600 block mb-1">
                     Preço de Custo (R$)
                   </label>
                   <input
@@ -592,13 +593,13 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
                     placeholder="Ex: 2,00"
                     value={costStr}
                     onChange={(e) => setCostStr(e.target.value)}
-                    className="w-full px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-slate-300 font-mono-numbers text-xs focus:outline-none focus:border-emerald-500"
+                    className="w-full px-3 py-2.5 rounded-xl bg-white border border-slate-300 text-slate-700 font-mono-numbers text-xs focus:outline-none focus:border-emerald-500"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-slate-400 block mb-1">
+                <label className="text-xs font-semibold text-slate-600 block mb-1">
                   Estoque Atual
                 </label>
                 <input
@@ -606,15 +607,15 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
                   placeholder="Quantidade"
                   value={stockStr}
                   onChange={(e) => setStockStr(e.target.value)}
-                  className="w-full px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-slate-100 font-mono-numbers text-xs focus:outline-none focus:border-emerald-500"
+                  className="w-full px-3 py-2.5 rounded-xl bg-white border border-slate-300 text-slate-900 font-mono-numbers text-xs focus:outline-none focus:border-emerald-500"
                 />
               </div>
 
               {/* Calculated profit preview */}
               {parseFloat(priceStr.replace(',', '.')) > 0 && (
-                <div className="bg-slate-950/80 rounded-xl p-3 border border-slate-800 flex items-center justify-between text-xs">
-                  <span className="text-slate-400">Lucro Estimado por Item:</span>
-                  <span className="font-bold text-emerald-400 font-mono-numbers">
+                <div className="bg-slate-50 rounded-xl p-3 border border-slate-200 flex items-center justify-between text-xs">
+                  <span className="text-slate-600">Lucro Estimado por Item:</span>
+                  <span className="font-bold text-emerald-700 font-mono-numbers">
                     {formatCurrency(
                       (parseFloat(priceStr.replace(',', '.')) || 0) -
                         (parseFloat(costStr.replace(',', '.')) || 0)
@@ -625,7 +626,7 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
 
               <button
                 type="submit"
-                className="w-full min-h-[50px] rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-sm flex items-center justify-center gap-2 shadow-lg touch-press transition-all"
+                className="w-full min-h-[50px] rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-sm flex items-center justify-center gap-2 shadow-xs touch-press transition-colors"
               >
                 {editingProduct ? 'SALVAR ALTERAÇÕES' : 'CADASTRAR PRODUTO'}
               </button>

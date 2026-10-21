@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Delete, Check, Banknote, QrCode, CreditCard, BookUser, User, AlertCircle } from 'lucide-react';
+import { X, Delete, Check, Banknote, QrCode, CreditCard, BookUser, User } from 'lucide-react';
 import { PaymentMethod, Sale } from '../types';
 import { formatCurrency } from '../utils/receipt';
 import { playSaleChime, playTapBeep } from '../utils/audio';
@@ -23,7 +23,7 @@ export const NumpadSaleModal: React.FC<NumpadSaleModalProps> = ({
   const [cents, setCents] = useState<number>(0);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('pix');
   const [receivedCents, setReceivedCents] = useState<number>(0);
-  const [description, setDescription] = useState<string>('Venda Rápida de Balcão/Rua');
+  const [description, setDescription] = useState<string>('Venda Rápida');
   const [customerName, setCustomerName] = useState<string>(defaultCustomerName || '');
   const [customerPhone, setCustomerPhone] = useState<string>('');
 
@@ -35,7 +35,7 @@ export const NumpadSaleModal: React.FC<NumpadSaleModalProps> = ({
 
   const handleDigit = (digit: string) => {
     if (soundEnabled) playTapBeep();
-    if (cents.toString().length >= 8) return; // Prevent overflow
+    if (cents.toString().length >= 8) return;
     const nextStr = (cents === 0 ? '' : cents.toString()) + digit;
     setCents(parseInt(nextStr || '0', 10));
   };
@@ -86,7 +86,7 @@ export const NumpadSaleModal: React.FC<NumpadSaleModalProps> = ({
           quantity: 1,
           unitPrice: totalAmount,
           subtotal: totalAmount,
-          costPrice: totalAmount * 0.45, // default estimated 55% margin
+          costPrice: totalAmount * 0.45,
         },
       ],
       totalAmount,
@@ -105,7 +105,6 @@ export const NumpadSaleModal: React.FC<NumpadSaleModalProps> = ({
     }
 
     onCompleteSale(newSale);
-    // Reset state
     setCents(0);
     setReceivedCents(0);
     setCustomerName('');
@@ -113,21 +112,21 @@ export const NumpadSaleModal: React.FC<NumpadSaleModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/75 backdrop-blur-sm p-0 sm:p-4">
-      <div className="w-full sm:max-w-md bg-slate-900 border border-slate-800 rounded-t-3xl sm:rounded-3xl shadow-2xl flex flex-col max-h-[92vh] overflow-y-auto no-scrollbar pb-safe">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-xs p-0 sm:p-4">
+      <div className="w-full sm:max-w-md bg-white border border-slate-200 rounded-t-3xl sm:rounded-3xl shadow-2xl flex flex-col max-h-[92vh] overflow-y-auto no-scrollbar pb-safe">
         
         {/* Header Bar */}
-        <div className="sticky top-0 bg-slate-900/95 backdrop-blur-md px-5 pt-4 pb-2 border-b border-slate-800 flex items-center justify-between z-10">
+        <div className="sticky top-0 bg-white/95 backdrop-blur-md px-5 pt-4 pb-2 border-b border-slate-200 flex items-center justify-between z-10">
           <div>
-            <h2 className="text-base font-bold text-slate-100 flex items-center gap-1.5">
-              <span>⚡ Venda Rápida na Rua</span>
+            <h2 className="text-base font-bold text-slate-900 flex items-center gap-1.5">
+              <span>Venda Rápida (Teclado)</span>
             </h2>
-            <p className="text-xs text-slate-400">Digite o valor e finalize em segundos</p>
+            <p className="text-xs text-slate-500">Digite o valor da venda e finalize</p>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="w-9 h-9 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center transition-colors"
+            className="w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
@@ -135,11 +134,11 @@ export const NumpadSaleModal: React.FC<NumpadSaleModalProps> = ({
 
         <div className="p-4 space-y-4">
           {/* Big Amount Screen */}
-          <div className="bg-slate-950 border border-slate-800/80 rounded-2xl p-4 text-center">
+          <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 text-center">
             <span className="text-xs uppercase tracking-wider text-slate-500 font-semibold block mb-1">
               Valor da Venda
             </span>
-            <div className="text-4xl sm:text-5xl font-black text-emerald-400 tracking-tight font-mono-numbers">
+            <div className="text-4xl sm:text-5xl font-black text-emerald-700 tracking-tight font-mono-numbers">
               {formatCurrency(totalAmount)}
             </div>
             
@@ -150,7 +149,7 @@ export const NumpadSaleModal: React.FC<NumpadSaleModalProps> = ({
                   key={v}
                   type="button"
                   onClick={() => handleAddQuick(v)}
-                  className="px-2.5 py-1 rounded-lg bg-slate-800/90 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700/60 transition-colors touch-press font-mono-numbers"
+                  className="px-2.5 py-1 rounded-lg bg-white hover:bg-slate-100 text-slate-800 text-xs font-semibold border border-slate-200 transition-colors touch-press font-mono-numbers shadow-xs"
                 >
                   +{v}
                 </button>
@@ -160,7 +159,7 @@ export const NumpadSaleModal: React.FC<NumpadSaleModalProps> = ({
 
           {/* Payment Method Selector (Segmented buttons) */}
           <div>
-            <label className="text-xs font-semibold text-slate-400 block mb-1.5">
+            <label className="text-xs font-semibold text-slate-600 block mb-1.5">
               Forma de Pagamento
             </label>
             <div className="grid grid-cols-3 gap-2">
@@ -170,13 +169,13 @@ export const NumpadSaleModal: React.FC<NumpadSaleModalProps> = ({
                   setPaymentMethod('pix');
                   if (soundEnabled) playTapBeep();
                 }}
-                className={`min-h-[46px] rounded-xl flex items-center justify-center gap-1.5 text-xs font-bold transition-all border ${
+                className={`min-h-[44px] rounded-xl flex items-center justify-center gap-1.5 text-xs font-bold transition-all border ${
                   paymentMethod === 'pix'
-                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50 shadow-sm'
-                    : 'bg-slate-800/80 text-slate-300 border-slate-700 hover:bg-slate-750'
+                    ? 'bg-emerald-50 text-emerald-800 border-emerald-400 shadow-xs'
+                    : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
                 }`}
               >
-                <QrCode className="w-4 h-4 text-emerald-400" />
+                <QrCode className="w-4 h-4 text-emerald-600" />
                 <span>PIX</span>
               </button>
 
@@ -186,13 +185,13 @@ export const NumpadSaleModal: React.FC<NumpadSaleModalProps> = ({
                   setPaymentMethod('dinheiro');
                   if (soundEnabled) playTapBeep();
                 }}
-                className={`min-h-[46px] rounded-xl flex items-center justify-center gap-1.5 text-xs font-bold transition-all border ${
+                className={`min-h-[44px] rounded-xl flex items-center justify-center gap-1.5 text-xs font-bold transition-all border ${
                   paymentMethod === 'dinheiro'
-                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50 shadow-sm'
-                    : 'bg-slate-800/80 text-slate-300 border-slate-700 hover:bg-slate-750'
+                    ? 'bg-emerald-50 text-emerald-800 border-emerald-400 shadow-xs'
+                    : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
                 }`}
               >
-                <Banknote className="w-4 h-4 text-emerald-400" />
+                <Banknote className="w-4 h-4 text-emerald-600" />
                 <span>Dinheiro</span>
               </button>
 
@@ -202,13 +201,13 @@ export const NumpadSaleModal: React.FC<NumpadSaleModalProps> = ({
                   setPaymentMethod('cartao_debito');
                   if (soundEnabled) playTapBeep();
                 }}
-                className={`min-h-[46px] rounded-xl flex items-center justify-center gap-1.5 text-xs font-bold transition-all border ${
+                className={`min-h-[44px] rounded-xl flex items-center justify-center gap-1.5 text-xs font-bold transition-all border ${
                   paymentMethod === 'cartao_debito'
-                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50 shadow-sm'
-                    : 'bg-slate-800/80 text-slate-300 border-slate-700 hover:bg-slate-750'
+                    ? 'bg-emerald-50 text-emerald-800 border-emerald-400 shadow-xs'
+                    : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
                 }`}
               >
-                <CreditCard className="w-4 h-4 text-emerald-400" />
+                <CreditCard className="w-4 h-4 text-emerald-600" />
                 <span>Débito</span>
               </button>
 
@@ -218,13 +217,13 @@ export const NumpadSaleModal: React.FC<NumpadSaleModalProps> = ({
                   setPaymentMethod('cartao_credito');
                   if (soundEnabled) playTapBeep();
                 }}
-                className={`min-h-[46px] rounded-xl flex items-center justify-center gap-1.5 text-xs font-bold transition-all border ${
+                className={`min-h-[44px] rounded-xl flex items-center justify-center gap-1.5 text-xs font-bold transition-all border ${
                   paymentMethod === 'cartao_credito'
-                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50 shadow-sm'
-                    : 'bg-slate-800/80 text-slate-300 border-slate-700 hover:bg-slate-750'
+                    ? 'bg-emerald-50 text-emerald-800 border-emerald-400 shadow-xs'
+                    : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
                 }`}
               >
-                <CreditCard className="w-4 h-4 text-emerald-400" />
+                <CreditCard className="w-4 h-4 text-emerald-600" />
                 <span>Crédito</span>
               </button>
 
@@ -234,13 +233,13 @@ export const NumpadSaleModal: React.FC<NumpadSaleModalProps> = ({
                   setPaymentMethod('fiado');
                   if (soundEnabled) playTapBeep();
                 }}
-                className={`min-h-[46px] rounded-xl flex items-center justify-center gap-1.5 text-xs font-bold transition-all border col-span-2 ${
+                className={`min-h-[44px] rounded-xl flex items-center justify-center gap-1.5 text-xs font-bold transition-all border col-span-2 ${
                   paymentMethod === 'fiado'
-                    ? 'bg-amber-500/20 text-amber-300 border-amber-500/50 shadow-sm'
-                    : 'bg-slate-800/80 text-slate-300 border-slate-700 hover:bg-slate-750'
+                    ? 'bg-amber-50 text-amber-800 border-amber-300 shadow-xs'
+                    : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
                 }`}
               >
-                <BookUser className="w-4 h-4 text-amber-400" />
+                <BookUser className="w-4 h-4 text-amber-600" />
                 <span>Venda A Prazo</span>
               </button>
             </div>
@@ -248,10 +247,10 @@ export const NumpadSaleModal: React.FC<NumpadSaleModalProps> = ({
 
           {/* Troco Calculator when Cash is selected */}
           {paymentMethod === 'dinheiro' && totalAmount > 0 && (
-            <div className="bg-slate-950 border border-slate-800 rounded-2xl p-3.5 space-y-2.5">
+            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3.5 space-y-2.5">
               <div className="flex items-center justify-between text-xs">
-                <span className="font-semibold text-slate-400">Dinheiro entregue pelo cliente:</span>
-                <span className="font-mono-numbers text-slate-200 font-bold">
+                <span className="font-semibold text-slate-600">Dinheiro entregue pelo cliente:</span>
+                <span className="font-mono-numbers text-slate-900 font-bold">
                   {amountReceived > 0 ? formatCurrency(amountReceived) : 'Exato'}
                 </span>
               </div>
@@ -265,8 +264,8 @@ export const NumpadSaleModal: React.FC<NumpadSaleModalProps> = ({
                     onClick={() => handleSelectCashBill(bill)}
                     className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-colors shrink-0 ${
                       receivedCents === bill * 100
-                        ? 'bg-emerald-500 text-slate-950 border-emerald-400'
-                        : 'bg-slate-900 border-slate-700 text-slate-300 hover:bg-slate-800'
+                        ? 'bg-emerald-600 text-white border-emerald-600'
+                        : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-100'
                     }`}
                   >
                     R$ {bill}
@@ -276,7 +275,7 @@ export const NumpadSaleModal: React.FC<NumpadSaleModalProps> = ({
                   <button
                     type="button"
                     onClick={() => setReceivedCents(0)}
-                    className="px-2 py-1.5 rounded-xl text-xs text-slate-400 hover:text-slate-200 shrink-0"
+                    className="px-2 py-1.5 rounded-xl text-xs text-slate-500 hover:text-slate-800 shrink-0"
                   >
                     Valor Exato
                   </button>
@@ -285,9 +284,9 @@ export const NumpadSaleModal: React.FC<NumpadSaleModalProps> = ({
 
               {/* Troco Result */}
               {changeGiven > 0 && (
-                <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between">
-                  <span className="text-xs font-bold text-amber-400">Devolver de Troco:</span>
-                  <span className="text-xl font-black text-amber-400 font-mono-numbers">
+                <div className="pt-2 border-t border-slate-200 flex items-center justify-between">
+                  <span className="text-xs font-bold text-emerald-800">Devolver de Troco:</span>
+                  <span className="text-xl font-black text-emerald-700 font-mono-numbers">
                     {formatCurrency(changeGiven)}
                   </span>
                 </div>
@@ -297,9 +296,9 @@ export const NumpadSaleModal: React.FC<NumpadSaleModalProps> = ({
 
           {/* Customer / Fiado details */}
           {(paymentMethod === 'fiado' || totalAmount > 50) && (
-            <div className="bg-slate-950/70 border border-slate-800 rounded-2xl p-3 space-y-2">
-              <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-300">
-                <User className="w-3.5 h-3.5 text-emerald-400" />
+            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3 space-y-2">
+              <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-700">
+                <User className="w-3.5 h-3.5 text-emerald-600" />
                 <span>Dados do Cliente {paymentMethod === 'fiado' ? '(Obrigatório para venda a prazo)' : '(Opcional)'}</span>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -308,14 +307,14 @@ export const NumpadSaleModal: React.FC<NumpadSaleModalProps> = ({
                   placeholder="Nome do Cliente (ex: Seu José da Padaria)"
                   value={customerName}
                   onChange={(e) => setCustomerName(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-slate-100 text-xs focus:outline-none focus:border-emerald-500"
+                  className="w-full px-3 py-2 rounded-xl bg-white border border-slate-300 text-slate-900 text-xs focus:outline-none focus:border-emerald-500"
                 />
                 <input
                   type="tel"
                   placeholder="WhatsApp (ex: 11999998888)"
                   value={customerPhone}
                   onChange={(e) => setCustomerPhone(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-slate-100 text-xs focus:outline-none focus:border-emerald-500"
+                  className="w-full px-3 py-2 rounded-xl bg-white border border-slate-300 text-slate-900 text-xs focus:outline-none focus:border-emerald-500"
                 />
               </div>
             </div>
@@ -328,7 +327,7 @@ export const NumpadSaleModal: React.FC<NumpadSaleModalProps> = ({
               placeholder="Descrição rápida do item/venda (opcional)"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-slate-300 text-xs focus:outline-none focus:border-slate-700"
+              className="w-full px-3 py-2 rounded-xl bg-white border border-slate-200 text-slate-700 text-xs focus:outline-none focus:border-emerald-500"
             />
           </div>
 
@@ -347,12 +346,12 @@ export const NumpadSaleModal: React.FC<NumpadSaleModalProps> = ({
                     else if (isBack) handleBackspace();
                     else handleDigit(key);
                   }}
-                  className={`min-h-[52px] rounded-2xl font-bold text-lg flex items-center justify-center transition-all touch-press ${
+                  className={`min-h-[50px] rounded-2xl font-bold text-lg flex items-center justify-center transition-all touch-press ${
                     isClear
-                      ? 'bg-rose-950/40 text-rose-300 border border-rose-900/40 hover:bg-rose-900/50'
+                      ? 'bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100'
                       : isBack
-                      ? 'bg-slate-800/80 text-slate-300 border border-slate-700 hover:bg-slate-700'
-                      : 'bg-slate-800 text-slate-100 border border-slate-700/80 hover:bg-slate-700 font-mono-numbers'
+                      ? 'bg-slate-100 text-slate-700 border border-slate-200 hover:bg-slate-200'
+                      : 'bg-slate-100 text-slate-900 border border-slate-200 hover:bg-slate-200 font-mono-numbers'
                   }`}
                 >
                   {isBack ? <Delete className="w-5 h-5" /> : key}
@@ -366,10 +365,10 @@ export const NumpadSaleModal: React.FC<NumpadSaleModalProps> = ({
             type="button"
             disabled={totalAmount <= 0}
             onClick={handleSubmit}
-            className={`w-full min-h-[52px] rounded-2xl font-extrabold text-sm flex items-center justify-center gap-2 shadow-lg transition-all touch-press ${
+            className={`w-full min-h-[50px] rounded-2xl font-extrabold text-sm flex items-center justify-center gap-2 shadow-xs transition-all touch-press ${
               totalAmount > 0
-                ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 shadow-emerald-500/20 active:scale-[0.98]'
-                : 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700'
+                ? 'bg-emerald-600 hover:bg-emerald-700 text-white active:scale-[0.98]'
+                : 'bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200'
             }`}
           >
             <Check className="w-5 h-5 stroke-[2.5]" />

@@ -45,8 +45,6 @@ export const CloseRegisterModal: React.FC<CloseRegisterModalProps> = ({
     byMethod[s.paymentMethod] = (byMethod[s.paymentMethod] || 0) + s.totalAmount;
   });
 
-  // Calculate physical cash expected in pocket:
-  // openingBalance + cash sales - cash expenses
   const cashSales = byMethod['dinheiro'] || 0;
   const cashExpenses = todayExpenses
     .filter((e) => e.paymentMethod === 'dinheiro')
@@ -77,21 +75,21 @@ export const CloseRegisterModal: React.FC<CloseRegisterModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/80 backdrop-blur-sm p-0 sm:p-4">
-      <div className="w-full sm:max-w-md bg-slate-900 border border-slate-800 rounded-t-3xl sm:rounded-3xl shadow-2xl flex flex-col max-h-[92vh] overflow-y-auto no-scrollbar pb-safe">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-xs p-0 sm:p-4">
+      <div className="w-full sm:max-w-md bg-white border border-slate-200 rounded-t-3xl sm:rounded-3xl shadow-2xl flex flex-col max-h-[92vh] overflow-y-auto no-scrollbar pb-safe">
         
         {/* Header */}
-        <div className="sticky top-0 bg-slate-900/95 backdrop-blur-md px-5 pt-4 pb-2 border-b border-slate-800 flex items-center justify-between z-10">
+        <div className="sticky top-0 bg-white/95 backdrop-blur-md px-5 pt-4 pb-2 border-b border-slate-200 flex items-center justify-between z-10">
           <div>
-            <h2 className="text-base font-bold text-slate-100 flex items-center gap-1.5">
-              <span>🔒 Fechamento de Caixa do Dia</span>
+            <h2 className="text-base font-bold text-slate-900 flex items-center gap-1.5">
+              <span>Fechamento de Caixa</span>
             </h2>
-            <p className="text-xs text-slate-400">Conferência final do dinheiro da rua</p>
+            <p className="text-xs text-slate-500">Conferência final do dinheiro da rua</p>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="w-9 h-9 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center transition-colors"
+            className="w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
@@ -99,24 +97,24 @@ export const CloseRegisterModal: React.FC<CloseRegisterModalProps> = ({
 
         {closedSummary ? (
           <div className="p-5 space-y-4">
-            <div className="bg-slate-950 border border-slate-800 rounded-2xl p-4 text-center">
-              <div className="w-12 h-12 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center mx-auto mb-2">
+            <div className="bg-emerald-50/70 border border-emerald-200 rounded-2xl p-4 text-center">
+              <div className="w-12 h-12 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-300 flex items-center justify-center mx-auto mb-2">
                 <ShieldCheck className="w-6 h-6" />
               </div>
-              <h3 className="text-base font-bold text-slate-100">Caixa Fechado com Sucesso!</h3>
-              <p className="text-xs text-slate-400 mt-1">
-                Lucro Líquido: <span className="font-bold text-emerald-400 font-mono-numbers">{formatCurrency(totalSales - totalExpenses)}</span>
+              <h3 className="text-base font-bold text-slate-900">Caixa Fechado com Sucesso!</h3>
+              <p className="text-xs text-slate-600 mt-1">
+                Lucro do Dia: <span className="font-bold text-emerald-700 font-mono-numbers">{formatCurrency(totalSales - totalExpenses)}</span>
               </p>
             </div>
 
-            <div className="bg-slate-950/60 rounded-xl p-3 border border-slate-800 text-xs font-mono whitespace-pre-wrap text-slate-300 leading-relaxed max-h-48 overflow-y-auto">
+            <div className="bg-slate-50 rounded-xl p-3 border border-slate-200 text-xs font-mono whitespace-pre-wrap text-slate-800 leading-relaxed max-h-48 overflow-y-auto">
               {closedSummary}
             </div>
 
             <button
               type="button"
               onClick={handleShareSummary}
-              className="w-full min-h-[48px] rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-950/40 touch-press transition-colors"
+              className="w-full min-h-[48px] rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-xs touch-press transition-colors"
             >
               <Share2 className="w-4 h-4" />
               <span>ENVIAR FECHAMENTO NO WHATSAPP</span>
@@ -125,7 +123,7 @@ export const CloseRegisterModal: React.FC<CloseRegisterModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="w-full min-h-[44px] rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs flex items-center justify-center transition-colors touch-press"
+              className="w-full min-h-[44px] rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold text-xs flex items-center justify-center transition-colors touch-press"
             >
               Concluir
             </button>
@@ -133,33 +131,33 @@ export const CloseRegisterModal: React.FC<CloseRegisterModalProps> = ({
         ) : (
           <div className="p-4 space-y-4">
             {/* Pocket Cash Breakdown */}
-            <div className="bg-slate-950 border border-slate-800 rounded-2xl p-4 space-y-2.5">
-              <span className="text-xs uppercase tracking-wider text-slate-500 font-semibold block">
+            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-2.5">
+              <span className="text-xs uppercase tracking-wider text-slate-600 font-semibold block">
                 Conferência de Dinheiro Físico
               </span>
 
               <div className="space-y-1.5 text-xs">
-                <div className="flex items-center justify-between text-slate-400">
-                  <span>Troco Inicial (Fundo que saiu de casa):</span>
-                  <span className="font-mono-numbers font-medium text-slate-200">
+                <div className="flex items-center justify-between text-slate-600">
+                  <span>Troco Inicial (que saiu de casa):</span>
+                  <span className="font-mono-numbers font-medium text-slate-900">
                     {formatCurrency(register.openingBalance)}
                   </span>
                 </div>
-                <div className="flex items-center justify-between text-emerald-400">
+                <div className="flex items-center justify-between text-emerald-700 font-medium">
                   <span>+ Vendas em Dinheiro:</span>
                   <span className="font-mono-numbers font-bold">
                     +{formatCurrency(cashSales)}
                   </span>
                 </div>
-                <div className="flex items-center justify-between text-rose-400">
+                <div className="flex items-center justify-between text-rose-700 font-medium">
                   <span>- Despesas pagas em Dinheiro:</span>
                   <span className="font-mono-numbers font-bold">
                     -{formatCurrency(cashExpenses)}
                   </span>
                 </div>
-                <div className="pt-2 border-t border-slate-800 flex items-center justify-between font-bold text-slate-200">
+                <div className="pt-2 border-t border-slate-200 flex items-center justify-between font-bold text-slate-900">
                   <span>Total Esperado no Bolso:</span>
-                  <span className="text-lg text-emerald-400 font-mono-numbers">
+                  <span className="text-lg text-emerald-700 font-mono-numbers font-black">
                     {formatCurrency(expectedCashInPocket)}
                   </span>
                 </div>
@@ -168,10 +166,10 @@ export const CloseRegisterModal: React.FC<CloseRegisterModalProps> = ({
 
             {/* Actual count input */}
             <div>
-              <label className="text-xs font-semibold text-slate-400 block mb-1">
+              <label className="text-xs font-semibold text-slate-600 block mb-1">
                 Quanto você tem em mãos no bolso agora? (R$)
               </label>
-              <div className="flex items-center rounded-2xl bg-slate-950 border border-slate-800 px-4 py-2.5">
+              <div className="flex items-center rounded-2xl bg-white border border-slate-300 px-4 py-2">
                 <span className="text-xl font-bold text-slate-400 mr-2">R$</span>
                 <input
                   type="text"
@@ -179,7 +177,7 @@ export const CloseRegisterModal: React.FC<CloseRegisterModalProps> = ({
                   placeholder={expectedCashInPocket.toFixed(2).replace('.', ',')}
                   value={actualCashStr}
                   onChange={(e) => setActualCashStr(e.target.value)}
-                  className="w-full text-2xl font-black text-slate-100 bg-transparent border-none focus:outline-none font-mono-numbers"
+                  className="w-full text-2xl font-black text-slate-900 bg-transparent border-none focus:outline-none font-mono-numbers"
                 />
               </div>
 
@@ -187,8 +185,8 @@ export const CloseRegisterModal: React.FC<CloseRegisterModalProps> = ({
                 <div
                   className={`mt-2 p-2.5 rounded-xl border text-xs flex items-center gap-2 ${
                     difference > 0
-                      ? 'bg-emerald-950/40 border-emerald-800/40 text-emerald-300'
-                      : 'bg-rose-950/40 border-rose-800/40 text-rose-300'
+                      ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                      : 'bg-rose-50 border-rose-200 text-rose-800'
                   }`}
                 >
                   <AlertTriangle className="w-4 h-4 shrink-0" />
@@ -202,32 +200,32 @@ export const CloseRegisterModal: React.FC<CloseRegisterModalProps> = ({
             </div>
 
             {/* General daily overview */}
-            <div className="bg-slate-950/60 rounded-xl p-3 border border-slate-800/70 text-xs space-y-1.5">
-              <div className="flex items-center justify-between text-slate-400">
+            <div className="bg-slate-50 rounded-xl p-3 border border-slate-200 text-xs space-y-1.5">
+              <div className="flex items-center justify-between text-slate-600">
                 <span>Vendas Totais do Dia:</span>
-                <span className="font-mono-numbers text-slate-200">{formatCurrency(totalSales)}</span>
+                <span className="font-mono-numbers text-slate-900 font-bold">{formatCurrency(totalSales)}</span>
               </div>
-              <div className="flex items-center justify-between text-slate-400">
+              <div className="flex items-center justify-between text-slate-600">
                 <span>Despesas Totais:</span>
-                <span className="font-mono-numbers text-slate-200">{formatCurrency(totalExpenses)}</span>
+                <span className="font-mono-numbers text-rose-700 font-bold">-{formatCurrency(totalExpenses)}</span>
               </div>
-              <div className="flex items-center justify-between font-bold text-emerald-400 pt-1 border-t border-slate-800/80">
-                <span>Lucro Líquido Real:</span>
-                <span className="font-mono-numbers">{formatCurrency(totalSales - totalExpenses)}</span>
+              <div className="flex items-center justify-between font-bold text-emerald-700 pt-1 border-t border-slate-200">
+                <span>Lucro do Dia:</span>
+                <span className="font-mono-numbers text-sm font-black">{formatCurrency(totalSales - totalExpenses)}</span>
               </div>
             </div>
 
             {/* Observation */}
             <div>
-              <label className="text-xs font-semibold text-slate-400 block mb-1">
+              <label className="text-xs font-semibold text-slate-600 block mb-1">
                 Observações do Turno (opcional)
               </label>
               <input
                 type="text"
-                placeholder="Ex: Ponto de venda muito bom na feira, dia nublado"
+                placeholder="Ex: Ponto de venda muito bom na feira"
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-slate-200 text-xs focus:outline-none focus:border-slate-700"
+                className="w-full px-3 py-2 rounded-xl bg-white border border-slate-300 text-slate-900 text-xs focus:outline-none focus:border-emerald-500"
               />
             </div>
 
@@ -235,7 +233,7 @@ export const CloseRegisterModal: React.FC<CloseRegisterModalProps> = ({
             <button
               type="button"
               onClick={handleConfirm}
-              className="w-full min-h-[50px] rounded-2xl bg-slate-100 hover:bg-white text-slate-950 font-extrabold text-sm flex items-center justify-center gap-2 shadow-lg transition-all touch-press"
+              className="w-full min-h-[50px] rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-sm flex items-center justify-center gap-2 shadow-xs transition-colors touch-press"
             >
               <Check className="w-5 h-5 stroke-[2.5]" />
               <span>FECHAR CAIXA E GERAR RELATÓRIO</span>
