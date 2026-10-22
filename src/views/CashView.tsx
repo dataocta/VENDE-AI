@@ -154,11 +154,6 @@ export const CashView: React.FC<CashViewProps> = ({
       `📝 A Prazo: ${formatCurrency(byMethod.fiado)}`,
     ];
 
-    if (filterOption === 'hoje' && register.openingBalance > 0) {
-      lines.push(`🪙 Troco inicial: ${formatCurrency(register.openingBalance)}`);
-      lines.push(`💵 Dinheiro físico esperado no bolso: ${formatCurrency(expectedPocketCash)}`);
-    }
-
     const text = lines.join('\n');
     const url = `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
     window.open(url, '_blank');
@@ -366,104 +361,78 @@ export const CashView: React.FC<CashViewProps> = ({
         </div>
       </div>
 
-      {/* 3. Troco Inicial e Dinheiro Físico no Bolso (Apenas Hoje) */}
-      {filterOption === 'hoje' && (
-        <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-xs space-y-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Wallet className="w-4 h-4 text-emerald-600" />
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                Dinheiro Físico no Bolso Hoje
-              </span>
-            </div>
-
-            {!isEditingOpening ? (
-              <button
-                type="button"
-                onClick={() => setIsEditingOpening(true)}
-                className="text-xs text-slate-500 hover:text-slate-800 flex items-center gap-1"
-              >
-                <Edit2 className="w-3 h-3" />
-                <span>Troco</span>
-              </button>
-            ) : null}
-          </div>
-
-          {isEditingOpening ? (
-            <div className="flex items-center gap-2 pt-1">
-              <span className="text-xs text-slate-600 font-medium">Troco Inicial: R$</span>
-              <input
-                type="text"
-                value={openingStr}
-                onChange={(e) => setOpeningStr(e.target.value)}
-                className="w-20 px-2 py-1 rounded-lg border border-slate-300 bg-white text-xs text-slate-900 font-mono-numbers"
-              />
-              <button
-                type="button"
-                onClick={handleSaveOpening}
-                className="p-1 rounded-lg bg-emerald-600 text-white text-xs font-bold"
-              >
-                <Check className="w-4 h-4" />
-              </button>
-            </div>
-          ) : (
-            <div className="space-y-1.5 text-xs text-slate-600">
-              <div className="flex justify-between">
-                <span>Troco inicial (abertura):</span>
-                <span className="font-mono-numbers text-slate-800">{formatCurrency(register.openingBalance)}</span>
-              </div>
-              <div className="flex justify-between text-emerald-700 font-semibold">
-                <span>+ Entradas em dinheiro:</span>
-                <span className="font-mono-numbers">+{formatCurrency(byMethod.dinheiro)}</span>
-              </div>
-              <div className="flex justify-between text-rose-600 font-semibold">
-                <span>- Despesas pagas em dinheiro:</span>
-                <span className="font-mono-numbers">-{formatCurrency(cashExpenses)}</span>
-              </div>
-              <div className="pt-2 border-t border-slate-200 flex justify-between items-center text-sm font-bold text-slate-900">
-                <span>Total que deve estar no bolso:</span>
-                <span className="text-xl text-emerald-700 font-black font-mono-numbers">
-                  {formatCurrency(expectedPocketCash)}
-                </span>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* 4. Lista Rápida de Lançamentos do Período */}
+      {/* 3. Lista de Transações no Período (Vendas e Despesas) */}
       <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-xs space-y-3">
-        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
-          Vendas do Período ({filteredSales.length})
-        </h3>
+        <div className="flex items-center justify-between">
+          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
+            Transações no Período ({filteredSales.length + filteredExpenses.length})
+          </h3>
+          <span className="text-[11px] text-slate-400 font-medium">
+            {filteredSales.length} entradas · {filteredExpenses.length} saídas
+          </span>
+        </div>
 
-        {filteredSales.length === 0 ? (
-          <p className="text-xs text-slate-400 py-3 text-center">Nenhuma venda encontrada no período selecionado.</p>
+        {filteredSales.length === 0 && filteredExpenses.length === 0 ? (
+          <p className="text-xs text-slate-400 py-4 text-center">Nenhuma transação encontrada no período selecionado.</p>
         ) : (
-          <div className="divide-y divide-slate-100 max-h-60 overflow-y-auto no-scrollbar">
-            {filteredSales.map((sale) => (
-              <div key={sale.id} className="py-2.5 flex items-center justify-between text-xs">
-                <div>
-                  <div className="font-bold text-slate-800">
-                    {sale.code} · {sale.items.map((i) => `${i.quantity}x ${i.name}`).join(', ') || 'Venda Rápida'}
+          <div className="divide-y divide-slate-100 max-h-80 overflow-y-auto overscroll-contain">
+            {/* Merged and sorted transactions */}
+            {[
+              ...filteredSales.map((s) => ({
+                id: s.id,
+                type: 'venda' as const,
+                title: `${s.code} · ${s.items.map((i) => `${i.quantity}x ${i.name}`).join(', ') || 'Venda'}`,
+                subtitle: `${formatDateOnlyBR(s.date.split('T')[0])} ${formatTimeOnlyBR(s.date)} · ${
+                  s.paymentMethod === 'fiado' ? 'A Prazo' : s.paymentMethod.replace('_', ' ')
+                }${s.customerName ? ` · ${s.customerName}` : ''}`,
+                amount: s.totalAmount,
+                date: s.date,
+              })),
+              ...filteredExpenses.map((e) => ({
+                id: e.id,
+                type: 'despesa' as const,
+                title: e.description || 'Despesa',
+                subtitle: `${formatDateOnlyBR(e.date.split('T')[0])} ${formatTimeOnlyBR(e.date)} · ${e.category} (${e.paymentMethod})`,
+                amount: e.amount,
+                date: e.date,
+              })),
+            ]
+              .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+              .map((tx) => (
+                <div key={tx.id} className="py-2.5 flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                    <div
+                      className={`w-7 h-7 rounded-xl flex items-center justify-center shrink-0 ${
+                        tx.type === 'venda'
+                          ? 'bg-emerald-50 text-emerald-700'
+                          : 'bg-rose-50 text-rose-600'
+                      }`}
+                    >
+                      {tx.type === 'venda' ? (
+                        <ArrowUpRight className="w-4 h-4" />
+                      ) : (
+                        <ArrowDownRight className="w-4 h-4" />
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="font-bold text-slate-800 truncate">
+                        {tx.title}
+                      </div>
+                      <div className="text-[11px] text-slate-400 truncate">
+                        {tx.subtitle}
+                      </div>
+                    </div>
                   </div>
-                  <div className="text-[11px] text-slate-400 flex items-center gap-1.5 mt-0.5">
-                    <span>{formatDateOnlyBR(sale.date.split('T')[0])} {formatTimeOnlyBR(sale.date)}</span>
-                    <span>·</span>
-                    <span className="capitalize">{sale.paymentMethod === 'fiado' ? 'A Prazo' : sale.paymentMethod.replace('_', ' ')}</span>
-                    {sale.customerName && (
-                      <>
-                        <span>·</span>
-                        <span className="text-slate-600 font-medium">{sale.customerName}</span>
-                      </>
-                    )}
-                  </div>
+                  <span
+                    className={`font-black font-mono-numbers shrink-0 ${
+                      tx.type === 'venda' ? 'text-emerald-700' : 'text-rose-600'
+                    }`}
+                  >
+                    {tx.type === 'venda' ? '+' : '-'}
+                    {formatCurrency(tx.amount)}
+                  </span>
                 </div>
-                <span className="font-black text-emerald-700 font-mono-numbers">
-                  {formatCurrency(sale.totalAmount)}
-                </span>
-              </div>
-            ))}
+              ))}
           </div>
         )}
       </div>

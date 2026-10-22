@@ -15,6 +15,11 @@ import {
   Banknote,
   BookUser,
   AlertCircle,
+  Edit2,
+  Search,
+  ChevronDown,
+  Target,
+  CheckCircle2,
 } from 'lucide-react';
 import { Product, Sale, CartItem, PaymentMethod, BusinessSettings, Customer, Expense } from '../types';
 import { formatCurrency, formatDateBR, getPaymentMethodLabel, generateWhatsAppSaleReceipt } from '../utils/receipt';
@@ -31,6 +36,7 @@ interface PosViewProps {
   onCancelSale: (saleId: string) => void;
   onOpenNumpadSale: () => void;
   onNavigateToTab: (tab: any) => void;
+  onUpdateSettings?: (settings: BusinessSettings) => void;
 }
 
 export const PosView: React.FC<PosViewProps> = ({
@@ -43,14 +49,21 @@ export const PosView: React.FC<PosViewProps> = ({
   onCancelSale,
   onOpenNumpadSale,
   onNavigateToTab,
+  onUpdateSettings,
 }) => {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string>('todos');
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
+  const [isCatalogSelectorOpen, setIsCatalogSelectorOpen] = useState(false);
+  const [catalogSearch, setCatalogSearch] = useState<string>('');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('pix');
   const [receivedCashStr, setReceivedCashStr] = useState<string>('');
   const [customerName, setCustomerName] = useState<string>('');
   const [customerPhone, setCustomerPhone] = useState<string>('');
+
+  // Daily goal inline editing state
+  const [isEditingGoal, setIsEditingGoal] = useState<boolean>(false);
+  const [tempGoalStr, setTempGoalStr] = useState<string>(settings.dailyGoal ? settings.dailyGoal.toString() : '');
 
   // Today's stats calculation
   const todayStr = new Date().toISOString().split('T')[0];
@@ -210,34 +223,134 @@ export const PosView: React.FC<PosViewProps> = ({
           </div>
         </div>
 
-        {/* Goal Bar */}
-        {settings.dailyGoal > 0 && (
-          <div className="mt-3 pt-2.5 border-t border-slate-100">
-            <div className="flex items-center justify-between text-xs mb-1">
-              <span className="text-slate-500">
-                Meta do Dia: <strong className="text-slate-800 font-mono-numbers">{formatCurrency(settings.dailyGoal)}</strong>
-              </span>
-              <span className="font-bold text-emerald-700 font-mono-numbers">{goalProgress}%</span>
+        {/* Goal Bar & Inline Edit */}
+        <div className="mt-3 pt-2.5 border-t border-slate-100">
+          {isEditingGoal ? (
+            <div className="space-y-2 bg-slate-50 border border-slate-200 rounded-2xl p-3 animate-in fade-in duration-150">
+              <div className="flex items-center justify-between text-xs font-bold text-slate-700">
+                <span className="flex items-center gap-1.5">
+                  <Target className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Definir Meta de Vendas Hoje</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setIsEditingGoal(false)}
+                  className="text-slate-400 hover:text-slate-600"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <div className="relative flex-1">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">
+                    R$
+                  </span>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    placeholder="0,00"
+                    value={tempGoalStr}
+                    onChange={(e) => setTempGoalStr(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2 rounded-xl bg-white border border-slate-300 text-slate-900 text-sm font-bold font-mono-numbers focus:outline-none focus:border-emerald-500 shadow-xs"
+                    autoFocus
+                  />
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const newGoal = parseFloat(tempGoalStr.replace(',', '.')) || 0;
+                    if (onUpdateSettings) {
+                      onUpdateSettings({ ...settings, dailyGoal: newGoal });
+                    }
+                    setIsEditingGoal(false);
+                  }}
+                  className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs touch-press transition-colors"
+                >
+                  Salvar
+                </button>
+              </div>
+
+              {/* Quick goal presets */}
+              <div className="flex items-center gap-1.5 pt-1 overflow-x-auto no-scrollbar">
+                {[100, 300, 500, 1000, 2000].map((preset) => (
+                  <button
+                    key={preset}
+                    type="button"
+                    onClick={() => setTempGoalStr(preset.toString())}
+                    className="px-2 py-0.5 rounded-lg bg-white border border-slate-200 text-slate-600 text-[11px] font-semibold hover:border-emerald-500 shrink-0 font-mono-numbers"
+                  >
+                    R$ {preset}
+                  </button>
+                ))}
+              </div>
             </div>
-            <div className="w-full h-2 rounded-full bg-slate-100 overflow-hidden">
-              <div
-                className="h-full bg-emerald-600 rounded-full transition-all duration-500"
-                style={{ width: `${goalProgress}%` }}
-              />
+          ) : (
+            <div>
+              <div className="flex items-center justify-between text-xs mb-1">
+                <span className="text-slate-500 flex items-center gap-1.5">
+                  <Target className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Meta do Dia:</span>
+                  <strong className="text-slate-900 font-mono-numbers">
+                    {settings.dailyGoal > 0 ? formatCurrency(settings.dailyGoal) : 'Não definida'}
+                  </strong>
+                </span>
+
+                <div className="flex items-center gap-2">
+                  {settings.dailyGoal > 0 && (
+                    <span className="font-bold text-emerald-700 font-mono-numbers">{goalProgress}%</span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTempGoalStr(settings.dailyGoal ? settings.dailyGoal.toString() : '');
+                      setIsEditingGoal(true);
+                    }}
+                    className="text-[11px] font-bold text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 px-2 py-0.5 rounded-md flex items-center gap-1 transition-colors"
+                  >
+                    <Edit2 className="w-3 h-3" />
+                    <span>{settings.dailyGoal > 0 ? 'Alterar' : 'Definir Meta'}</span>
+                  </button>
+                </div>
+              </div>
+
+              {settings.dailyGoal > 0 && (
+                <>
+                  <div className="w-full h-2 rounded-full bg-slate-100 overflow-hidden">
+                    <div
+                      className="h-full bg-emerald-600 rounded-full transition-all duration-500"
+                      style={{ width: `${goalProgress}%` }}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between text-[11px] text-slate-400 mt-1">
+                    <span>
+                      {todaySalesTotal >= settings.dailyGoal ? (
+                        <span className="text-emerald-700 font-bold flex items-center gap-1">
+                          <CheckCircle2 className="w-3 h-3" /> Parabéns, meta batida!
+                        </span>
+                      ) : (
+                        <span>Faltam {formatCurrency(Math.max(0, settings.dailyGoal - todaySalesTotal))}</span>
+                      )}
+                    </span>
+                    <span className="font-mono-numbers">{formatCurrency(todaySalesTotal)} vendido</span>
+                  </div>
+                </>
+              )}
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
-      {/* 2. Fast Primary Action: Registrar Venda */}
+      {/* 2. Fast Primary Action: Registrar Venda (Abre Seleção de Produtos do Catálogo) */}
       <div className="grid grid-cols-1 gap-2.5">
         <button
           type="button"
-          onClick={onOpenNumpadSale}
+          onClick={() => setIsCatalogSelectorOpen(true)}
           className="w-full min-h-[52px] rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-sm flex items-center justify-center gap-2 shadow-xs touch-press transition-colors tracking-wide"
         >
-          <Zap className="w-4 h-4 fill-white stroke-none" />
-          <span>REGISTRAR VENDA</span>
+          <ShoppingBag className="w-4 h-4 text-white" />
+          <span>REGISTRAR VENDA (SELECIONAR PRODUTOS)</span>
         </button>
       </div>
 
@@ -527,76 +640,33 @@ export const PosView: React.FC<PosViewProps> = ({
                 </span>
               </div>
 
-              {/* Payment Method Selector */}
+              {/* Payment Method Selector (Dropdown) */}
               <div>
-                <label className="text-xs font-semibold text-slate-600 block mb-1.5">
-                  Forma de Pagamento
+                <label className="text-xs font-bold text-slate-700 block mb-1.5">
+                  Opção de Pagamento
                 </label>
-                <div className="grid grid-cols-3 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setPaymentMethod('pix')}
-                    className={`min-h-[44px] rounded-xl flex items-center justify-center gap-1.5 text-xs font-bold border transition-colors ${
-                      paymentMethod === 'pix'
-                        ? 'bg-emerald-50 text-emerald-800 border-emerald-400 shadow-xs'
-                        : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
-                    }`}
+                <div className="relative">
+                  <select
+                    value={paymentMethod}
+                    onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod)}
+                    className="w-full h-12 pl-11 pr-10 rounded-2xl bg-white border border-slate-300 text-slate-900 text-sm font-bold focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 appearance-none shadow-xs cursor-pointer"
                   >
-                    <QrCode className="w-3.5 h-3.5 text-emerald-600" />
-                    <span>PIX</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setPaymentMethod('dinheiro')}
-                    className={`min-h-[44px] rounded-xl flex items-center justify-center gap-1.5 text-xs font-bold border transition-colors ${
-                      paymentMethod === 'dinheiro'
-                        ? 'bg-emerald-50 text-emerald-800 border-emerald-400 shadow-xs'
-                        : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
-                    }`}
-                  >
-                    <Banknote className="w-3.5 h-3.5 text-emerald-600" />
-                    <span>Dinheiro</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setPaymentMethod('cartao_debito')}
-                    className={`min-h-[44px] rounded-xl flex items-center justify-center gap-1.5 text-xs font-bold border transition-colors ${
-                      paymentMethod === 'cartao_debito'
-                        ? 'bg-emerald-50 text-emerald-800 border-emerald-400 shadow-xs'
-                        : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
-                    }`}
-                  >
-                    <CreditCard className="w-3.5 h-3.5 text-emerald-600" />
-                    <span>Débito</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setPaymentMethod('cartao_credito')}
-                    className={`min-h-[44px] rounded-xl flex items-center justify-center gap-1.5 text-xs font-bold border transition-colors ${
-                      paymentMethod === 'cartao_credito'
-                        ? 'bg-emerald-50 text-emerald-800 border-emerald-400 shadow-xs'
-                        : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
-                    }`}
-                  >
-                    <CreditCard className="w-3.5 h-3.5 text-emerald-600" />
-                    <span>Crédito</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setPaymentMethod('fiado')}
-                    className={`min-h-[44px] rounded-xl flex items-center justify-center gap-1.5 text-xs font-bold border col-span-2 transition-colors ${
-                      paymentMethod === 'fiado'
-                        ? 'bg-amber-50 text-amber-800 border-amber-300 shadow-xs'
-                        : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
-                    }`}
-                  >
-                    <BookUser className="w-3.5 h-3.5 text-amber-600" />
-                    <span>Venda A Prazo</span>
-                  </button>
+                    <option value="pix">PIX (Chave ou QR Code)</option>
+                    <option value="dinheiro">Dinheiro Físico</option>
+                    <option value="cartao_debito">Cartão de Débito</option>
+                    <option value="cartao_credito">Cartão de Crédito</option>
+                    <option value="fiado">Venda a Prazo (Fiado / Notinha)</option>
+                  </select>
+                  <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-emerald-600">
+                    {paymentMethod === 'pix' && <QrCode className="w-5 h-5" />}
+                    {paymentMethod === 'dinheiro' && <Banknote className="w-5 h-5" />}
+                    {paymentMethod === 'cartao_debito' && <CreditCard className="w-5 h-5" />}
+                    {paymentMethod === 'cartao_credito' && <CreditCard className="w-5 h-5" />}
+                    {paymentMethod === 'fiado' && <BookUser className="w-5 h-5 text-amber-600" />}
+                  </div>
+                  <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3.5 text-slate-400">
+                    <ChevronDown className="w-4 h-4" />
+                  </div>
                 </div>
               </div>
 
@@ -678,6 +748,225 @@ export const PosView: React.FC<PosViewProps> = ({
                 <Check className="w-5 h-5 stroke-[3]" />
                 <span>CONFIRMAR VENDA ({formatCurrency(cartTotal)})</span>
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Catalog Product Selection Modal/Drawer */}
+      {isCatalogSelectorOpen && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-xs p-0 sm:p-4">
+          <div className="w-full sm:max-w-md bg-white border border-slate-200 rounded-t-3xl sm:rounded-3xl shadow-2xl flex flex-col max-h-[92vh] overflow-hidden">
+            {/* Header */}
+            <div className="px-5 pt-4 pb-3 border-b border-slate-100 flex items-center justify-between shrink-0 bg-white">
+              <div className="flex items-center gap-2">
+                <ShoppingBag className="w-5 h-5 text-emerald-600" />
+                <div>
+                  <h3 className="text-base font-extrabold text-slate-900 leading-tight">
+                    Selecionar Produtos
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Selecione os itens do catálogo para a venda
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsCatalogSelectorOpen(false)}
+                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Search and Category Filter */}
+            <div className="p-3 border-b border-slate-100 space-y-2 shrink-0 bg-slate-50/50">
+              <div className="relative">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="Pesquisar produto pelo nome..."
+                  value={catalogSearch}
+                  onChange={(e) => setCatalogSearch(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2 rounded-xl bg-white border border-slate-200 text-slate-900 text-xs focus:outline-none focus:border-emerald-500 shadow-xs"
+                />
+                {catalogSearch && (
+                  <button
+                    type="button"
+                    onClick={() => setCatalogSearch('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+
+              {/* Category pills */}
+              <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+                {categories.map((cat) => (
+                  <button
+                    key={`modal-cat-${cat}`}
+                    type="button"
+                    onClick={() => setSelectedCategory(cat)}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors ${
+                      selectedCategory === cat
+                        ? 'bg-slate-900 text-white'
+                        : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    {cat === 'todos' ? 'Todos' : cat}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Products List Scrollable Container */}
+            <div className="flex-1 overflow-y-auto p-3 space-y-2 divide-y divide-slate-100">
+              {products.length === 0 ? (
+                <div className="text-center py-8 px-4 space-y-3">
+                  <ShoppingBag className="w-10 h-10 text-slate-300 mx-auto" />
+                  <div>
+                    <h4 className="text-sm font-bold text-slate-800">Nenhum produto cadastrado</h4>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Cadastre seus produtos com valor de venda para selecioná-los facilmente.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsCatalogSelectorOpen(false);
+                      onNavigateToTab('products');
+                    }}
+                    className="px-4 py-2 rounded-xl bg-emerald-600 text-white font-bold text-xs inline-flex items-center gap-1.5 shadow-xs"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Cadastrar Produtos</span>
+                  </button>
+                </div>
+              ) : (
+                (() => {
+                  const modalFilteredProducts = products.filter((p) => {
+                    const matchCategory = selectedCategory === 'todos' || p.category === selectedCategory;
+                    const matchSearch =
+                      !catalogSearch.trim() ||
+                      p.name.toLowerCase().includes(catalogSearch.toLowerCase().trim()) ||
+                      p.category.toLowerCase().includes(catalogSearch.toLowerCase().trim());
+                    return matchCategory && matchSearch;
+                  });
+
+                  if (modalFilteredProducts.length === 0) {
+                    return (
+                      <div className="text-center py-8 text-slate-400 text-xs">
+                        Nenhum produto encontrado com os filtros selecionados.
+                      </div>
+                    );
+                  }
+
+                  return modalFilteredProducts.map((prod) => {
+                    const inCart = cart.find((i) => i.product.id === prod.id);
+
+                    return (
+                      <div
+                        key={`selector-${prod.id}`}
+                        className={`pt-2.5 first:pt-0 flex items-center justify-between gap-3 p-2 rounded-xl transition-colors ${
+                          inCart ? 'bg-emerald-50/60' : 'hover:bg-slate-50'
+                        }`}
+                      >
+                        <div className="min-w-0 flex-1">
+                          <span className="text-[10px] text-slate-500 font-medium block uppercase tracking-wider">
+                            {prod.category}
+                          </span>
+                          <h4 className="text-xs font-bold text-slate-900 truncate">
+                            {prod.name}
+                          </h4>
+                          <span className="text-xs font-extrabold text-emerald-700 font-mono-numbers block mt-0.5">
+                            {formatCurrency(prod.price)}
+                          </span>
+                        </div>
+
+                        <div className="shrink-0 flex items-center gap-1.5">
+                          {inCart ? (
+                            <div className="flex items-center bg-white border border-emerald-300 rounded-xl shadow-xs overflow-hidden">
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveOne(prod.id)}
+                                className="w-8 h-8 flex items-center justify-center text-slate-600 hover:text-slate-900 active:bg-slate-100"
+                              >
+                                <Minus className="w-3.5 h-3.5" />
+                              </button>
+                              <span className="px-2 text-xs font-extrabold text-emerald-700 font-mono-numbers">
+                                {inCart.quantity}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => handleAddToCart(prod)}
+                                className="w-8 h-8 flex items-center justify-center text-slate-600 hover:text-slate-900 active:bg-slate-100"
+                              >
+                                <Plus className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleAddToCart(prod)}
+                              className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1 shadow-xs touch-press transition-colors"
+                            >
+                              <Plus className="w-3.5 h-3.5" />
+                              <span>Adicionar</span>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  });
+                })()
+              )}
+            </div>
+
+            {/* Bottom Checkout Action Bar */}
+            <div className="p-3 bg-white border-t border-slate-200 shrink-0 space-y-2">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-slate-500 font-medium">
+                  {cartItemsCount} {cartItemsCount === 1 ? 'item selecionado' : 'itens selecionados'}
+                </span>
+                <span className="text-base font-black text-emerald-700 font-mono-numbers">
+                  Total: {formatCurrency(cartTotal)}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2">
+                {cartItemsCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleClearCart}
+                    title="Limpar seleção"
+                    className="p-2.5 rounded-xl border border-slate-200 text-rose-600 hover:bg-rose-50 text-xs font-bold"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  disabled={cartItemsCount === 0}
+                  onClick={() => {
+                    setIsCatalogSelectorOpen(false);
+                    setIsCheckoutOpen(true);
+                  }}
+                  className={`flex-1 min-h-[46px] rounded-xl font-extrabold text-xs flex items-center justify-center gap-2 shadow-xs touch-press transition-all ${
+                    cartItemsCount > 0
+                      ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                      : 'bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200'
+                  }`}
+                >
+                  <Check className="w-4 h-4 stroke-[3]" />
+                  <span>
+                    {cartItemsCount > 0
+                      ? `AVANÇAR PARA PAGAMENTO (${formatCurrency(cartTotal)})`
+                      : 'SELECIONE AO MENOS 1 ITEM'}
+                  </span>
+                </button>
+              </div>
             </div>
           </div>
         </div>

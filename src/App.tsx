@@ -308,6 +308,7 @@ export default function App() {
             onCancelSale={handleCancelSale}
             onOpenNumpadSale={() => setIsNumpadOpen(true)}
             onNavigateToTab={(tab) => setActiveTab(tab)}
+            onUpdateSettings={handleUpdateSettings}
           />
         )}
 

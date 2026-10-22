@@ -46,6 +46,8 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [activeFilter, setActiveFilter] = useState<'all' | 'debts' | 'clear'>('all');
+  const [lastSaleFilter, setLastSaleFilter] = useState<'all' | 'today' | '7days' | '30days' | 'inactive' | 'custom'>('all');
+  const [customLastSaleDate, setCustomLastSaleDate] = useState<string>('');
   const [isNewCustomerOpen, setIsNewCustomerOpen] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [expandedCustomerId, setExpandedCustomerId] = useState<string | null>(null);
@@ -68,6 +70,8 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
       debt?: CustomerDebt;
       clientSales: Sale[];
       totalSpent: number;
+      lastSaleDate: string | null;
+      lastSale: Sale | null;
     }>();
 
     // 1. Add all customers
@@ -76,17 +80,26 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
       const matchedDebt = debts.find(
         (d) => d.name.trim().toLowerCase() === normKey || (c.phone && d.phone && d.phone.replace(/\D/g, '') === c.phone.replace(/\D/g, ''))
       );
-      const clientSales = sales.filter(
-        (s) => (s.customerName && s.customerName.trim().toLowerCase() === normKey) ||
-               (c.phone && s.customerPhone && s.customerPhone.replace(/\D/g, '') === c.phone.replace(/\D/g, ''))
-      );
+      const clientSales = sales
+        .filter(
+          (s) => (s.customerName && s.customerName.trim().toLowerCase() === normKey) ||
+                 (c.phone && s.customerPhone && s.customerPhone.replace(/\D/g, '') === c.phone.replace(/\D/g, ''))
+        )
+        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      
       const totalSpent = clientSales.reduce((acc, s) => acc + s.totalAmount, 0);
+      const lastSale = clientSales.length > 0 ? clientSales[0] : null;
+      const lastSaleDate = lastSale
+        ? lastSale.date.split('T')[0]
+        : (matchedDebt?.lastPurchaseDate ? matchedDebt.lastPurchaseDate.split('T')[0] : null);
 
       map.set(c.id, {
         customer: c,
         debt: matchedDebt,
         clientSales,
         totalSpent,
+        lastSaleDate,
+        lastSale,
       });
     });
 
@@ -105,16 +118,24 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
           addressOrSpot: d.addressOrSpot,
           createdAt: d.lastPurchaseDate || new Date().toISOString(),
         };
-        const clientSales = sales.filter(
-          (s) => s.customerName && s.customerName.trim().toLowerCase() === d.name.trim().toLowerCase()
-        );
+        const clientSales = sales
+          .filter(
+            (s) => s.customerName && s.customerName.trim().toLowerCase() === d.name.trim().toLowerCase()
+          )
+          .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
         const totalSpent = clientSales.reduce((acc, s) => acc + s.totalAmount, 0);
+        const lastSale = clientSales.length > 0 ? clientSales[0] : null;
+        const lastSaleDate = lastSale
+          ? lastSale.date.split('T')[0]
+          : (d.lastPurchaseDate ? d.lastPurchaseDate.split('T')[0] : null);
 
         map.set(tempCust.id, {
           customer: tempCust,
           debt: d,
           clientSales,
           totalSpent,
+          lastSaleDate,
+          lastSale,
         });
       }
     });
@@ -140,11 +161,28 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
       if (!matchSearch) return false;
 
       const hasDebt = (item.debt?.totalOwed || 0) > 0;
-      if (activeFilter === 'debts') return hasDebt;
-      if (activeFilter === 'clear') return !hasDebt;
+      if (activeFilter === 'debts' && !hasDebt) return false;
+      if (activeFilter === 'clear' && hasDebt) return false;
+
+      // Filter by last sale date
+      if (lastSaleFilter === 'today') {
+        if (item.lastSaleDate !== todayStr) return false;
+      } else if (lastSaleFilter === '7days') {
+        const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+        if (!item.lastSaleDate || item.lastSaleDate < sevenDaysAgo || item.lastSaleDate > todayStr) return false;
+      } else if (lastSaleFilter === '30days') {
+        const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+        if (!item.lastSaleDate || item.lastSaleDate < thirtyDaysAgo || item.lastSaleDate > todayStr) return false;
+      } else if (lastSaleFilter === 'inactive') {
+        const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+        if (item.lastSaleDate && item.lastSaleDate >= thirtyDaysAgo) return false;
+      } else if (lastSaleFilter === 'custom') {
+        if (!customLastSaleDate || item.lastSaleDate !== customLastSaleDate) return false;
+      }
+
       return true;
     });
-  }, [clientList, searchTerm, activeFilter]);
+  }, [clientList, searchTerm, activeFilter, lastSaleFilter, customLastSaleDate, todayStr]);
 
   const handleOpenWhatsApp = (customer: Customer, debt?: CustomerDebt) => {
     let cleanPhone = customer.phone.replace(/\D/g, '');
@@ -358,6 +396,64 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
             Em Dia ({clientList.length - clientsWithDebts.length})
           </button>
         </div>
+
+        {/* Filter by Last Sale Date */}
+        <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-2.5 space-y-1.5">
+          <div className="flex items-center justify-between text-[11px] font-bold text-slate-600 px-1">
+            <span className="flex items-center gap-1">
+              <Calendar className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Filtrar por Data da Última Venda:</span>
+            </span>
+            {lastSaleFilter !== 'all' && (
+              <button
+                type="button"
+                onClick={() => {
+                  setLastSaleFilter('all');
+                  setCustomLastSaleDate('');
+                }}
+                className="text-emerald-700 hover:text-emerald-800 font-semibold text-[10px]"
+              >
+                Limpar filtro
+              </button>
+            )}
+          </div>
+
+          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+            {[
+              { id: 'all', label: 'Todas as datas' },
+              { id: 'today', label: 'Comprou Hoje' },
+              { id: '7days', label: 'Últimos 7 dias' },
+              { id: '30days', label: 'Últimos 30 dias' },
+              { id: 'inactive', label: '+30 dias sem compras' },
+              { id: 'custom', label: 'Data Específica' },
+            ].map((f) => (
+              <button
+                key={`lsf-${f.id}`}
+                type="button"
+                onClick={() => setLastSaleFilter(f.id as any)}
+                className={`px-2.5 py-1 rounded-xl text-xs font-semibold whitespace-nowrap transition-colors touch-press ${
+                  lastSaleFilter === f.id
+                    ? 'bg-emerald-600 text-white font-bold shadow-xs'
+                    : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+                }`}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+
+          {lastSaleFilter === 'custom' && (
+            <div className="pt-1 flex items-center gap-2">
+              <span className="text-xs text-slate-500 font-medium shrink-0">Selecione a data:</span>
+              <input
+                type="date"
+                value={customLastSaleDate}
+                onChange={(e) => setCustomLastSaleDate(e.target.value)}
+                className="px-3 py-1.5 rounded-xl bg-white border border-slate-300 text-slate-900 text-xs font-medium focus:outline-none focus:border-emerald-500"
+              />
+            </div>
+          )}
+        </div>
       </div>
 
       {/* 4. Client Cards List */}
@@ -429,6 +525,26 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                   >
                     <Edit2 className="w-3.5 h-3.5" />
                   </button>
+                </div>
+
+                {/* Last purchase date display */}
+                <div className="flex items-center justify-between text-xs bg-slate-50/70 border border-slate-100 px-3 py-1.5 rounded-xl">
+                  <span className="text-slate-500 font-medium flex items-center gap-1.5">
+                    <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                    <span>Última Compra:</span>
+                  </span>
+                  {item.lastSaleDate ? (
+                    <span className={`text-xs font-bold font-mono-numbers ${
+                      item.lastSaleDate === todayStr ? 'text-emerald-700 font-black' : 'text-slate-700'
+                    }`}>
+                      {item.lastSaleDate === todayStr ? 'Hoje' : formatDateOnlyBR(item.lastSaleDate)}
+                      {item.lastSale ? ` · ${formatCurrency(item.lastSale.totalAmount)}` : ''}
+                    </span>
+                  ) : (
+                    <span className="text-xs text-slate-400 italic">
+                      Nenhuma compra registrada
+                    </span>
+                  )}
                 </div>
 
                 {/* Financial Summary Box */}

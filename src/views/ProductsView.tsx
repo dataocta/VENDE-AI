@@ -502,9 +502,9 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
 
       {/* Product Add/Edit Modal */}
       {isAddOpen && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-xs p-0 sm:p-4">
-          <div className="w-full sm:max-w-md bg-white border border-slate-200 rounded-t-3xl sm:rounded-3xl shadow-2xl flex flex-col max-h-[92vh] overflow-y-auto no-scrollbar pb-safe">
-            <div className="sticky top-0 bg-white/95 backdrop-blur-md px-5 pt-4 pb-2 border-b border-slate-200 flex items-center justify-between z-10">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-xs p-0 sm:p-4 overflow-y-auto overscroll-contain">
+          <div className="w-full sm:max-w-md bg-white border border-slate-200 rounded-t-3xl sm:rounded-3xl shadow-2xl flex flex-col max-h-[88vh] sm:max-h-[85vh] overflow-hidden">
+            <div className="shrink-0 bg-white px-5 pt-4 pb-3 border-b border-slate-100 flex items-center justify-between z-10">
               <div>
                 <h2 className="text-base font-bold text-slate-900">
                   {editingProduct ? 'Editar Produto' : 'Cadastrar Produto'}
@@ -520,7 +520,7 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
               </button>
             </div>
 
-            <form onSubmit={handleSaveProductForm} className="p-4 space-y-3.5">
+            <form onSubmit={handleSaveProductForm} className="p-5 pb-16 space-y-3.5 overflow-y-auto flex-1 overscroll-contain">
               <div>
                 <label className="text-xs font-semibold text-slate-600 block mb-1">
                   Nome do Produto *
@@ -624,12 +624,22 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
                 </div>
               )}
 
-              <button
-                type="submit"
-                className="w-full min-h-[50px] rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-sm flex items-center justify-center gap-2 shadow-xs touch-press transition-colors"
-              >
-                {editingProduct ? 'SALVAR ALTERAÇÕES' : 'CADASTRAR PRODUTO'}
-              </button>
+              <div className="pt-2 pb-6 flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsAddOpen(false)}
+                  className="px-4 min-h-[48px] rounded-2xl border border-slate-300 text-slate-700 font-bold text-xs hover:bg-slate-50 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 min-h-[48px] rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs flex items-center justify-center gap-1.5 shadow-xs touch-press transition-colors tracking-wide"
+                >
+                  <Check className="w-4 h-4 stroke-[3]" />
+                  <span>{editingProduct ? 'SALVAR ALTERAÇÕES' : 'CADASTRAR PRODUTO'}</span>
+                </button>
+              </div>
             </form>
           </div>
         </div>

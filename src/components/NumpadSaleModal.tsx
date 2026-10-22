@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Delete, Check, Banknote, QrCode, CreditCard, BookUser, User } from 'lucide-react';
+import { X, Delete, Check, Banknote, QrCode, CreditCard, BookUser, User, ChevronDown } from 'lucide-react';
 import { PaymentMethod, Sale, Customer } from '../types';
 import { formatCurrency } from '../utils/receipt';
 import { playSaleChime, playTapBeep } from '../utils/audio';
@@ -121,9 +121,9 @@ export const NumpadSaleModal: React.FC<NumpadSaleModalProps> = ({
         <div className="sticky top-0 bg-white/95 backdrop-blur-md px-5 pt-4 pb-2 border-b border-slate-200 flex items-center justify-between z-10">
           <div>
             <h2 className="text-base font-bold text-slate-900 flex items-center gap-1.5">
-              <span>Venda Rápida (Teclado)</span>
+              <span>Registrar Venda por Valor</span>
             </h2>
-            <p className="text-xs text-slate-500">Digite o valor da venda e finalize</p>
+            <p className="text-xs text-slate-500">Digite o valor da venda e confirme o recebimento</p>
           </div>
           <button
             type="button"
@@ -159,91 +159,36 @@ export const NumpadSaleModal: React.FC<NumpadSaleModalProps> = ({
             </div>
           </div>
 
-          {/* Payment Method Selector (Segmented buttons) */}
+          {/* Payment Method Selector (Dropdown) */}
           <div>
-            <label className="text-xs font-semibold text-slate-600 block mb-1.5">
-              Forma de Pagamento
+            <label className="text-xs font-bold text-slate-700 block mb-1.5">
+              Opção de Pagamento
             </label>
-            <div className="grid grid-cols-3 gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setPaymentMethod('pix');
+            <div className="relative">
+              <select
+                value={paymentMethod}
+                onChange={(e) => {
+                  setPaymentMethod(e.target.value as PaymentMethod);
                   if (soundEnabled) playTapBeep();
                 }}
-                className={`min-h-[44px] rounded-xl flex items-center justify-center gap-1.5 text-xs font-bold transition-all border ${
-                  paymentMethod === 'pix'
-                    ? 'bg-emerald-50 text-emerald-800 border-emerald-400 shadow-xs'
-                    : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
-                }`}
+                className="w-full h-12 pl-11 pr-10 rounded-2xl bg-white border border-slate-300 text-slate-900 text-sm font-bold focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 appearance-none shadow-xs cursor-pointer"
               >
-                <QrCode className="w-4 h-4 text-emerald-600" />
-                <span>PIX</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setPaymentMethod('dinheiro');
-                  if (soundEnabled) playTapBeep();
-                }}
-                className={`min-h-[44px] rounded-xl flex items-center justify-center gap-1.5 text-xs font-bold transition-all border ${
-                  paymentMethod === 'dinheiro'
-                    ? 'bg-emerald-50 text-emerald-800 border-emerald-400 shadow-xs'
-                    : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
-                }`}
-              >
-                <Banknote className="w-4 h-4 text-emerald-600" />
-                <span>Dinheiro</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setPaymentMethod('cartao_debito');
-                  if (soundEnabled) playTapBeep();
-                }}
-                className={`min-h-[44px] rounded-xl flex items-center justify-center gap-1.5 text-xs font-bold transition-all border ${
-                  paymentMethod === 'cartao_debito'
-                    ? 'bg-emerald-50 text-emerald-800 border-emerald-400 shadow-xs'
-                    : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
-                }`}
-              >
-                <CreditCard className="w-4 h-4 text-emerald-600" />
-                <span>Débito</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setPaymentMethod('cartao_credito');
-                  if (soundEnabled) playTapBeep();
-                }}
-                className={`min-h-[44px] rounded-xl flex items-center justify-center gap-1.5 text-xs font-bold transition-all border ${
-                  paymentMethod === 'cartao_credito'
-                    ? 'bg-emerald-50 text-emerald-800 border-emerald-400 shadow-xs'
-                    : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
-                }`}
-              >
-                <CreditCard className="w-4 h-4 text-emerald-600" />
-                <span>Crédito</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setPaymentMethod('fiado');
-                  if (soundEnabled) playTapBeep();
-                }}
-                className={`min-h-[44px] rounded-xl flex items-center justify-center gap-1.5 text-xs font-bold transition-all border col-span-2 ${
-                  paymentMethod === 'fiado'
-                    ? 'bg-amber-50 text-amber-800 border-amber-300 shadow-xs'
-                    : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
-                }`}
-              >
-                <BookUser className="w-4 h-4 text-amber-600" />
-                <span>Venda A Prazo</span>
-              </button>
+                <option value="pix">PIX (Chave ou QR Code)</option>
+                <option value="dinheiro">Dinheiro Físico</option>
+                <option value="cartao_debito">Cartão de Débito</option>
+                <option value="cartao_credito">Cartão de Crédito</option>
+                <option value="fiado">Venda a Prazo (Fiado / Notinha)</option>
+              </select>
+              <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-emerald-600">
+                {paymentMethod === 'pix' && <QrCode className="w-5 h-5" />}
+                {paymentMethod === 'dinheiro' && <Banknote className="w-5 h-5" />}
+                {paymentMethod === 'cartao_debito' && <CreditCard className="w-5 h-5" />}
+                {paymentMethod === 'cartao_credito' && <CreditCard className="w-5 h-5" />}
+                {paymentMethod === 'fiado' && <BookUser className="w-5 h-5 text-amber-600" />}
+              </div>
+              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3.5 text-slate-400">
+                <ChevronDown className="w-4 h-4" />
+              </div>
             </div>
           </div>
 
