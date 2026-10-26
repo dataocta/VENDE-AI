@@ -8,10 +8,11 @@ import {
   EyeOff,
   ArrowRight,
   AlertCircle,
-  X,
-  Check,
 } from 'lucide-react';
-import { registerUser, loginUser, loginWithGoogle } from '../utils/authStorage';
+import { signInWithPopup } from 'firebase/auth';
+import { auth, googleProvider } from '../firebase';
+import { registerUser, loginUser, saveRegisteredUsers, getRegisteredUsers, setCurrentUser } from '../utils/authStorage';
+import { getUserProfileFirestore, saveUserProfileFirestore } from '../utils/firestoreService';
 import { UserAccount } from '../types';
 
 interface AuthViewProps {
@@ -33,10 +34,6 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
   const [regPhone, setRegPhone] = useState('');
   const [regPassword, setRegPassword] = useState('');
 
-  // Google modal state
-  const [isGoogleModalOpen, setIsGoogleModalOpen] = useState(false);
-  const [googleEmailInput, setGoogleEmailInput] = useState('cosquinha66@gmail.com');
-
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -56,39 +53,96 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
     }, 200);
   };
 
-  const handleRegisterSubmit = (e: React.FormEvent) => {
+  const handleRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
     setIsLoading(true);
 
-    setTimeout(() => {
-      const res = registerUser({
-        name: regName,
-        email: regEmail,
-        phone: regPhone,
-        password: regPassword,
-        businessName: `Vendas de ${regName.split(' ')[0] || 'Rua'}`,
-      });
+    const res = registerUser({
+      name: regName,
+      email: regEmail,
+      phone: regPhone,
+      password: regPassword,
+      businessName: `Vendas de ${regName.split(' ')[0] || 'Rua'}`,
+    });
 
-      setIsLoading(false);
-      if (res.success && res.user) {
-        onAuthSuccess(res.user);
-      } else {
-        setErrorMessage(res.error || 'Erro ao criar conta.');
+    if (res.success && res.user) {
+      try {
+        await saveUserProfileFirestore(res.user);
+      } catch (err) {
+        console.warn('Could not save user profile to Firestore immediately', err);
       }
-    }, 200);
+      setIsLoading(false);
+      onAuthSuccess(res.user);
+    } else {
+      setIsLoading(false);
+      setErrorMessage(res.error || 'Erro ao criar conta.');
+    }
   };
 
-  const handleGoogleQuickLogin = (emailToUse: string) => {
+  const handleGoogleRealLogin = async () => {
+    setErrorMessage(null);
     setIsLoading(true);
-    setIsGoogleModalOpen(false);
-    setTimeout(() => {
-      const res = loginWithGoogle(emailToUse);
-      setIsLoading(false);
-      if (res.success && res.user) {
-        onAuthSuccess(res.user);
+
+    try {
+      const result = await signInWithPopup(auth, googleProvider);
+      const fbUser = result.user;
+      const cleanEmail = (fbUser.email || '').trim().toLowerCase();
+      const cleanName = fbUser.displayName || cleanEmail.split('@')[0] || 'Vendedor';
+
+      // Check if user profile already exists in Firestore or locally
+      let userAccount = await getUserProfileFirestore(fbUser.uid);
+
+      if (!userAccount) {
+        // Also check if local user matched by email
+        const localUsers = getRegisteredUsers();
+        const existingLocal = localUsers.find((u) => u.email.toLowerCase() === cleanEmail);
+
+        const now = new Date();
+        const sevenDaysLater = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+        userAccount = {
+          id: fbUser.uid,
+          name: cleanName,
+          email: cleanEmail,
+          phone: fbUser.phoneNumber || existingLocal?.phone || '',
+          businessName: existingLocal?.businessName || `Vendas de ${cleanName.split(' ')[0]}`,
+          createdAt: existingLocal?.createdAt || now.toISOString(),
+          trialEndsAt: existingLocal?.trialEndsAt || sevenDaysLater.toISOString(),
+          subscriptionStatus: existingLocal?.subscriptionStatus || 'trial',
+          planPrice: 15.97,
+        };
+
+        // Save in Firestore database
+        await saveUserProfileFirestore(userAccount);
       }
-    }, 250);
+
+      // Keep local users list up to date
+      const users = getRegisteredUsers();
+      const idx = users.findIndex((u) => u.id === userAccount!.id || u.email.toLowerCase() === cleanEmail);
+      if (idx >= 0) {
+        users[idx] = userAccount;
+      } else {
+        users.unshift(userAccount);
+      }
+      saveRegisteredUsers(users);
+      setCurrentUser(userAccount);
+
+      setIsLoading(false);
+      onAuthSuccess(userAccount);
+    } catch (err: any) {
+      setIsLoading(false);
+      console.error('Google Auth Error:', err);
+      if (err.code === 'auth/popup-closed-by-user') {
+        setErrorMessage('O login com o Google foi fechado antes de concluir.');
+      } else if (err.code === 'auth/cancelled-popup-request') {
+        // Ignore rapid clicks
+      } else if (err.code === 'auth/popup-blocked') {
+        setErrorMessage('A janela de login com o Google foi bloqueada pelo navegador. Permita pop-ups para entrar.');
+      } else {
+        setErrorMessage(err.message || 'Falha ao autenticar com o Google. Tente novamente.');
+      }
+    }
   };
 
   return (
@@ -105,7 +159,7 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
             />
           </div>
           <p className="text-xs text-slate-500 font-medium">
-            Gestão rápida de vendas, despesas e caixa
+            Gestão de vendas, caixa e clientes com banco em nuvem seguro
           </p>
         </div>
 
@@ -120,12 +174,12 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
         {/* Clean Auth Card */}
         <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-xs space-y-4">
           
-          {/* 1. Botão Oficial: Login com o Google */}
+          {/* 1. Botão Oficial: Login com o Google (Autenticação Real) */}
           <button
             type="button"
-            onClick={() => setIsGoogleModalOpen(true)}
+            onClick={handleGoogleRealLogin}
             disabled={isLoading}
-            className="w-full min-h-[46px] rounded-2xl bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 font-bold text-xs flex items-center justify-center gap-2.5 shadow-xs touch-press transition-colors"
+            className="w-full min-h-[48px] rounded-2xl bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 font-bold text-xs flex items-center justify-center gap-2.5 shadow-xs touch-press transition-colors disabled:opacity-50"
           >
             {/* Google G Multi-Color SVG */}
             <svg className="w-4 h-4" viewBox="0 0 24 24">
@@ -146,14 +200,14 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
                 d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
               />
             </svg>
-            <span>Continuar com o Google</span>
+            <span>{isLoading ? 'Conectando ao Google...' : 'Continuar com o Google'}</span>
           </button>
 
           {/* Clean Divider */}
           <div className="relative flex items-center justify-center">
             <div className="w-full border-t border-slate-200" />
             <span className="bg-white px-2.5 text-[11px] text-slate-400 font-medium">
-              ou
+              ou com e-mail/senha
             </span>
           </div>
 
@@ -289,7 +343,7 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
                     placeholder="Mínimo 4 dígitos"
                     value={regPassword}
                     onChange={(e) => setRegPassword(e.target.value)}
-                    className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-white border border-slate-300 text-slate-900 text-xs focus:outline-none focus:border-emerald-500 font-medium"
+                    className="w-full pl-9 pr-10 py-2.5 rounded-xl bg-white border border-slate-300 text-slate-900 text-xs focus:outline-none focus:border-emerald-500 font-medium"
                   />
                 </div>
               </div>
@@ -321,101 +375,6 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
         </div>
 
       </div>
-
-      {/* Modal / Prompt de Seleção de Conta Google */}
-      {isGoogleModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-150">
-          <div className="w-full max-w-sm bg-white rounded-t-3xl sm:rounded-3xl border border-slate-200 p-5 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div className="flex items-center gap-2">
-                <svg className="w-5 h-5" viewBox="0 0 24 24">
-                  <path
-                    fill="#4285F4"
-                    d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                  />
-                  <path
-                    fill="#34A853"
-                    d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                  />
-                  <path
-                    fill="#FBBC05"
-                    d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
-                  />
-                  <path
-                    fill="#EA4335"
-                    d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
-                  />
-                </svg>
-                <h3 className="text-sm font-extrabold text-slate-900">
-                  Fazer login com o Google
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsGoogleModalOpen(false)}
-                className="p-1 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* Quick 1-tap Account Card */}
-            <div className="space-y-2">
-              <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">
-                Escolha uma conta para continuar no Vende.ai
-              </span>
-
-              {/* Account item */}
-              <button
-                type="button"
-                onClick={() => handleGoogleQuickLogin(googleEmailInput)}
-                className="w-full p-3 rounded-2xl border border-emerald-200 bg-emerald-50/70 hover:bg-emerald-100/70 text-left flex items-center justify-between gap-3 transition-colors"
-              >
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <div className="w-9 h-9 rounded-full bg-emerald-600 text-white font-bold text-xs flex items-center justify-center shrink-0">
-                    {googleEmailInput.slice(0, 1).toUpperCase()}
-                  </div>
-                  <div className="min-w-0">
-                    <span className="block text-xs font-bold text-slate-900 truncate">
-                      {googleEmailInput.split('@')[0]}
-                    </span>
-                    <span className="block text-[11px] text-slate-500 truncate">
-                      {googleEmailInput}
-                    </span>
-                  </div>
-                </div>
-                <div className="px-2.5 py-1 rounded-lg bg-emerald-600 text-white text-[11px] font-bold shrink-0">
-                  Entrar
-                </div>
-              </button>
-            </div>
-
-            {/* Or custom Google email input */}
-            <div className="pt-2 border-t border-slate-100 space-y-2">
-              <label className="text-[11px] text-slate-500 block">
-                Usar outra conta Google:
-              </label>
-              <div className="flex gap-2">
-                <input
-                  type="email"
-                  placeholder="outroemail@gmail.com"
-                  value={googleEmailInput}
-                  onChange={(e) => setGoogleEmailInput(e.target.value)}
-                  className="flex-1 px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-800 focus:outline-none focus:border-emerald-500"
-                />
-                <button
-                  type="button"
-                  onClick={() => handleGoogleQuickLogin(googleEmailInput)}
-                  className="px-3 py-2 rounded-xl bg-slate-900 hover:bg-black text-white text-xs font-bold"
-                >
-                  Acessar
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
     </div>
   );
 };

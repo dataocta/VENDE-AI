@@ -1,29 +1,17 @@
 import React, { useState } from 'react';
 import {
   Zap,
-  Plus,
-  Minus,
   Trash2,
   Share2,
-  Check,
-  ShoppingBag,
   TrendingUp,
   Receipt,
   X,
-  CreditCard,
-  QrCode,
-  Banknote,
-  BookUser,
-  AlertCircle,
   Edit2,
-  Search,
-  ChevronDown,
   Target,
   CheckCircle2,
 } from 'lucide-react';
-import { Product, Sale, CartItem, PaymentMethod, BusinessSettings, Customer, Expense } from '../types';
-import { formatCurrency, formatDateBR, getPaymentMethodLabel, generateWhatsAppSaleReceipt } from '../utils/receipt';
-import { playSaleChime, playTapBeep } from '../utils/audio';
+import { Product, Sale, BusinessSettings, Customer, Expense } from '../types';
+import { formatCurrency, getPaymentMethodLabel, generateWhatsAppSaleReceipt } from '../utils/receipt';
 import { SalesAnalyticsCharts } from '../components/SalesAnalyticsCharts';
 
 interface PosViewProps {
@@ -40,27 +28,14 @@ interface PosViewProps {
 }
 
 export const PosView: React.FC<PosViewProps> = ({
-  products,
   sales,
   expenses = [],
-  customers = [],
   settings,
-  onCompleteSale,
   onCancelSale,
   onOpenNumpadSale,
   onNavigateToTab,
   onUpdateSettings,
 }) => {
-  const [cart, setCart] = useState<CartItem[]>([]);
-  const [selectedCategory, setSelectedCategory] = useState<string>('todos');
-  const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
-  const [isCatalogSelectorOpen, setIsCatalogSelectorOpen] = useState(false);
-  const [catalogSearch, setCatalogSearch] = useState<string>('');
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('pix');
-  const [receivedCashStr, setReceivedCashStr] = useState<string>('');
-  const [customerName, setCustomerName] = useState<string>('');
-  const [customerPhone, setCustomerPhone] = useState<string>('');
-
   // Daily goal inline editing state
   const [isEditingGoal, setIsEditingGoal] = useState<boolean>(false);
   const [tempGoalStr, setTempGoalStr] = useState<string>(settings.dailyGoal ? settings.dailyGoal.toString() : '');
@@ -72,104 +47,6 @@ export const PosView: React.FC<PosViewProps> = ({
   const todayExpenses = expenses.filter((e) => e.date.startsWith(todayStr));
   const todayExpensesTotal = todayExpenses.reduce((acc, e) => acc + e.amount, 0);
   const goalProgress = settings.dailyGoal > 0 ? Math.min(100, Math.round((todaySalesTotal / settings.dailyGoal) * 100)) : 0;
-
-  // Categories list
-  const categories = ['todos', ...Array.from(new Set(products.map((p) => p.category)))];
-
-  const filteredProducts = selectedCategory === 'todos'
-    ? products
-    : products.filter((p) => p.category === selectedCategory);
-
-  const cartTotal = cart.reduce((acc, item) => acc + item.product.price * item.quantity, 0);
-  const cartCostTotal = cart.reduce((acc, item) => acc + (item.product.costPrice || 0) * item.quantity, 0);
-  const cartItemsCount = cart.reduce((acc, item) => acc + item.quantity, 0);
-
-  const handleAddToCart = (product: Product) => {
-    if (settings.soundEnabled) playTapBeep();
-    setCart((prev) => {
-      const idx = prev.findIndex((i) => i.product.id === product.id);
-      if (idx >= 0) {
-        const copy = [...prev];
-        copy[idx].quantity += 1;
-        return copy;
-      }
-      return [...prev, { product, quantity: 1 }];
-    });
-  };
-
-  const handleRemoveOne = (productId: string) => {
-    if (settings.soundEnabled) playTapBeep();
-    setCart((prev) => {
-      const idx = prev.findIndex((i) => i.product.id === productId);
-      if (idx >= 0) {
-        if (prev[idx].quantity > 1) {
-          const copy = [...prev];
-          copy[idx].quantity -= 1;
-          return copy;
-        }
-        return prev.filter((i) => i.product.id !== productId);
-      }
-      return prev;
-    });
-  };
-
-  const handleClearCart = () => {
-    if (settings.soundEnabled) playTapBeep();
-    setCart([]);
-    setIsCheckoutOpen(false);
-  };
-
-  const handleOpenCheckout = () => {
-    if (cart.length === 0) return;
-    if (settings.soundEnabled) playTapBeep();
-    setIsCheckoutOpen(true);
-  };
-
-  const handleFinalizeCartSale = () => {
-    if (cartTotal <= 0) return;
-
-    if (paymentMethod === 'fiado' && !customerName.trim()) {
-      alert('Para venda a prazo, informe o nome do cliente!');
-      return;
-    }
-
-    const receivedCash = parseFloat(receivedCashStr.replace(',', '.')) || 0;
-    const changeGiven = paymentMethod === 'dinheiro' && receivedCash > cartTotal ? receivedCash - cartTotal : 0;
-
-    const saleCode = `#${Math.floor(1000 + Math.random() * 9000)}`;
-    const newSale: Sale = {
-      id: `sale_${Date.now()}`,
-      code: saleCode,
-      date: new Date().toISOString(),
-      items: cart.map((ci) => ({
-        productId: ci.product.id,
-        name: ci.product.name,
-        quantity: ci.quantity,
-        unitPrice: ci.product.price,
-        subtotal: ci.product.price * ci.quantity,
-        costPrice: ci.product.costPrice,
-      })),
-      totalAmount: cartTotal,
-      totalCost: cartCostTotal,
-      paymentMethod,
-      amountReceived: paymentMethod === 'dinheiro' && receivedCash > 0 ? receivedCash : cartTotal,
-      changeGiven: paymentMethod === 'dinheiro' ? changeGiven : 0,
-      customerName: customerName.trim() || undefined,
-      customerPhone: customerPhone.trim() || undefined,
-      status: 'concluida',
-    };
-
-    if (settings.soundEnabled) {
-      playSaleChime();
-    }
-
-    onCompleteSale(newSale);
-    setCart([]);
-    setIsCheckoutOpen(false);
-    setReceivedCashStr('');
-    setCustomerName('');
-    setCustomerPhone('');
-  };
 
   const handleShareSale = (sale: Sale) => {
     const text = generateWhatsAppSaleReceipt(sale, settings);
@@ -342,170 +219,22 @@ export const PosView: React.FC<PosViewProps> = ({
         </div>
       </div>
 
-      {/* 2. Fast Primary Action: Registrar Venda (Abre Seleção de Produtos do Catálogo) */}
+      {/* 2. Fast Primary Action: Registrar Venda (Do jeito antigo, teclado numérico direto) */}
       <div className="grid grid-cols-1 gap-2.5">
         <button
           type="button"
-          onClick={() => setIsCatalogSelectorOpen(true)}
+          onClick={onOpenNumpadSale}
           className="w-full min-h-[52px] rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-sm flex items-center justify-center gap-2 shadow-xs touch-press transition-colors tracking-wide"
         >
-          <ShoppingBag className="w-4 h-4 text-white" />
-          <span>REGISTRAR VENDA (SELECIONAR PRODUTOS)</span>
+          <Zap className="w-4 h-4 fill-white stroke-none" />
+          <span>REGISTRAR VENDA</span>
         </button>
       </div>
 
-      {/* 3. Desempenho & Gráficos: Dia Recorde, Produtos Mais Vendidos e Formas de Pagamento */}
+      {/* 3. Desempenho & Gráficos: Linha de Vendas, Produtos Mais Vendidos e Formas de Pagamento */}
       <SalesAnalyticsCharts sales={sales} settings={settings} />
 
-      {/* 3. Fast Pocket Catalog Header & Filter Tabs */}
-      <div className="space-y-2.5">
-        <div className="flex items-center justify-between px-1">
-          <div className="flex items-center gap-1.5">
-            <ShoppingBag className="w-4 h-4 text-emerald-600" />
-            <h3 className="text-sm font-bold text-slate-900">Catálogo de Produtos</h3>
-          </div>
-          <span className="text-xs text-slate-500">
-            {filteredProducts.length} itens
-          </span>
-        </div>
-
-        {/* Filter buttons */}
-        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
-          {categories.map((cat) => (
-            <button
-              key={cat}
-              type="button"
-              onClick={() => setSelectedCategory(cat)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-colors touch-press ${
-                selectedCategory === cat
-                  ? 'bg-slate-900 text-white font-bold'
-                  : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
-              }`}
-            >
-              {cat === 'todos' ? 'Todos os Produtos' : cat}
-            </button>
-          ))}
-        </div>
-
-        {/* Product Cards Grid or Clean State Onboarding */}
-        {products.length === 0 ? (
-          <div className="bg-white border border-slate-200 rounded-3xl p-6 text-center space-y-3 shadow-xs">
-            <div className="w-12 h-12 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-600 flex items-center justify-center mx-auto">
-              <ShoppingBag className="w-6 h-6" />
-            </div>
-            <div>
-              <h4 className="text-sm font-bold text-slate-900">
-                Sua lista de produtos está limpa!
-              </h4>
-              <p className="text-xs text-slate-500 max-w-xs mx-auto mt-1">
-                Cadastre seus produtos com preço de venda para vender com 1 toque, ou use o teclado numérico acima para digitar valores diretos.
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => onNavigateToTab('products')}
-              className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs inline-flex items-center gap-1.5 touch-press transition-colors shadow-xs"
-            >
-              <Plus className="w-4 h-4 stroke-[3]" />
-              <span>CADASTRAR PRIMEIRO PRODUTO</span>
-            </button>
-          </div>
-        ) : filteredProducts.length === 0 ? (
-          <div className="bg-white border border-slate-200 rounded-2xl p-6 text-center text-slate-500 text-xs shadow-xs">
-            Nenhum produto nesta categoria.
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-            {filteredProducts.map((prod) => {
-              const inCart = cart.find((i) => i.product.id === prod.id);
-
-              return (
-                <div
-                  key={prod.id}
-                  onClick={() => handleAddToCart(prod)}
-                  className={`p-3 rounded-2xl border transition-all text-left flex flex-col justify-between cursor-pointer touch-press relative ${
-                    inCart
-                      ? 'bg-emerald-50/80 border-emerald-400 shadow-xs ring-1 ring-emerald-500/30'
-                      : 'bg-white border-slate-200 hover:border-slate-300 shadow-xs'
-                  }`}
-                >
-                  {inCart && (
-                    <span className="absolute -top-1.5 -right-1.5 w-6 h-6 rounded-full bg-emerald-600 text-white text-xs font-black flex items-center justify-center shadow-xs">
-                      {inCart.quantity}
-                    </span>
-                  )}
-
-                  <div>
-                    <span className="text-[11px] text-slate-500 font-medium block truncate">
-                      {prod.category}
-                    </span>
-                    <h4 className="text-xs sm:text-sm font-bold text-slate-900 leading-snug line-clamp-2 mt-0.5">
-                      {prod.name}
-                    </h4>
-                  </div>
-
-                  <div className="mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between">
-                    <span className="text-sm sm:text-base font-extrabold text-emerald-700 font-mono-numbers">
-                      {formatCurrency(prod.price)}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleAddToCart(prod);
-                      }}
-                      className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-emerald-600 hover:text-white text-slate-700 flex items-center justify-center transition-colors"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-
-      {/* 4. Active Cart Sticky Bar (Natural Thumb Zone when items added) */}
-      {cartItemsCount > 0 && (
-        <div className="fixed bottom-20 left-3 right-3 sm:left-auto sm:right-auto sm:w-full sm:max-w-md z-30">
-          <div className="bg-white/98 backdrop-blur-xl border border-slate-300 rounded-2xl p-3 shadow-xl flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2.5 min-w-0">
-              <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white font-black text-sm flex items-center justify-center shrink-0">
-                {cartItemsCount}
-              </div>
-              <div className="min-w-0">
-                <span className="text-[11px] text-slate-500 uppercase font-semibold block">Total Carrinho</span>
-                <span className="text-lg font-black text-emerald-700 font-mono-numbers truncate block">
-                  {formatCurrency(cartTotal)}
-                </span>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-1.5 shrink-0">
-              <button
-                type="button"
-                onClick={handleClearCart}
-                title="Limpar carrinho"
-                className="w-10 h-10 rounded-xl bg-slate-100 text-rose-600 hover:bg-rose-50 flex items-center justify-center transition-colors"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
-
-              <button
-                type="button"
-                onClick={handleOpenCheckout}
-                className="px-4 h-10 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs flex items-center gap-1.5 shadow-xs touch-press transition-all"
-              >
-                <span>COBRAR</span>
-                <Check className="w-4 h-4 stroke-[3]" />
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 5. Today's Recent Sales Feed */}
+      {/* 4. Today's Recent Sales Feed */}
       <div className="space-y-2 pt-2">
         <div className="flex items-center justify-between px-1">
           <div className="flex items-center gap-1.5">
@@ -518,7 +247,7 @@ export const PosView: React.FC<PosViewProps> = ({
 
         {todaySales.length === 0 ? (
           <div className="bg-white border border-slate-200 rounded-2xl p-6 text-center text-slate-500 text-xs shadow-xs">
-            Nenhuma venda registrada hoje ainda. Toque no botão verde acima para vender!
+            Nenhuma venda registrada hoje ainda. Toque no botão verde acima para registrar uma venda!
           </div>
         ) : (
           <div className="space-y-2">
@@ -574,403 +303,6 @@ export const PosView: React.FC<PosViewProps> = ({
           </div>
         )}
       </div>
-
-      {/* Cart Checkout Bottom Sheet */}
-      {isCheckoutOpen && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-xs p-0 sm:p-4">
-          <div className="w-full sm:max-w-md bg-white border border-slate-200 rounded-t-3xl sm:rounded-3xl shadow-2xl flex flex-col max-h-[92vh] overflow-y-auto no-scrollbar pb-safe">
-            <div className="sticky top-0 bg-white/95 backdrop-blur-md px-5 pt-4 pb-2 border-b border-slate-200 flex items-center justify-between z-10">
-              <div>
-                <h2 className="text-base font-bold text-slate-900">Finalizar Venda</h2>
-                <p className="text-xs text-slate-500">{cartItemsCount} itens no carrinho</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsCheckoutOpen(false)}
-                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="p-4 space-y-4">
-              {/* Selected items list */}
-              <div className="bg-slate-50 rounded-2xl p-3 border border-slate-200 divide-y divide-slate-200/80 max-h-48 overflow-y-auto">
-                {cart.map((item) => (
-                  <div key={item.product.id} className="py-2 first:pt-0 last:pb-0 flex items-center justify-between text-xs">
-                    <div className="min-w-0 pr-2">
-                      <div className="font-semibold text-slate-900 truncate">{item.product.name}</div>
-                      <div className="text-slate-500 font-mono-numbers">
-                        {item.quantity} x {formatCurrency(item.product.price)}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <div className="flex items-center bg-white border border-slate-200 rounded-lg">
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveOne(item.product.id)}
-                          className="w-6 h-6 flex items-center justify-center text-slate-600 hover:text-slate-900"
-                        >
-                          <Minus className="w-3 h-3" />
-                        </button>
-                        <span className="px-2 text-xs font-bold text-slate-900 font-mono-numbers">
-                          {item.quantity}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => handleAddToCart(item.product)}
-                          className="w-6 h-6 flex items-center justify-center text-slate-600 hover:text-slate-900"
-                        >
-                          <Plus className="w-3 h-3" />
-                        </button>
-                      </div>
-                      <span className="font-extrabold text-slate-900 font-mono-numbers w-16 text-right">
-                        {formatCurrency(item.product.price * item.quantity)}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Total display */}
-              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3.5 flex items-center justify-between">
-                <span className="text-xs uppercase font-bold text-slate-500">Total a Pagar</span>
-                <span className="text-2xl font-black text-emerald-700 font-mono-numbers">
-                  {formatCurrency(cartTotal)}
-                </span>
-              </div>
-
-              {/* Payment Method Selector (Dropdown) */}
-              <div>
-                <label className="text-xs font-bold text-slate-700 block mb-1.5">
-                  Opção de Pagamento
-                </label>
-                <div className="relative">
-                  <select
-                    value={paymentMethod}
-                    onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod)}
-                    className="w-full h-12 pl-11 pr-10 rounded-2xl bg-white border border-slate-300 text-slate-900 text-sm font-bold focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 appearance-none shadow-xs cursor-pointer"
-                  >
-                    <option value="pix">PIX (Chave ou QR Code)</option>
-                    <option value="dinheiro">Dinheiro Físico</option>
-                    <option value="cartao_debito">Cartão de Débito</option>
-                    <option value="cartao_credito">Cartão de Crédito</option>
-                    <option value="fiado">Venda a Prazo (Fiado / Notinha)</option>
-                  </select>
-                  <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-emerald-600">
-                    {paymentMethod === 'pix' && <QrCode className="w-5 h-5" />}
-                    {paymentMethod === 'dinheiro' && <Banknote className="w-5 h-5" />}
-                    {paymentMethod === 'cartao_debito' && <CreditCard className="w-5 h-5" />}
-                    {paymentMethod === 'cartao_credito' && <CreditCard className="w-5 h-5" />}
-                    {paymentMethod === 'fiado' && <BookUser className="w-5 h-5 text-amber-600" />}
-                  </div>
-                  <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3.5 text-slate-400">
-                    <ChevronDown className="w-4 h-4" />
-                  </div>
-                </div>
-              </div>
-
-              {/* Troco if cash */}
-              {paymentMethod === 'dinheiro' && (
-                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3 space-y-2">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-slate-600 font-semibold">Valor entregue pelo cliente:</span>
-                    <input
-                      type="text"
-                      inputMode="decimal"
-                      placeholder="R$ 0,00"
-                      value={receivedCashStr}
-                      onChange={(e) => setReceivedCashStr(e.target.value)}
-                      className="w-28 px-2 py-1 rounded-lg bg-white border border-slate-300 text-right font-mono-numbers text-slate-900 text-xs focus:outline-none focus:border-emerald-500"
-                    />
-                  </div>
-                  {parseFloat(receivedCashStr.replace(',', '.')) > cartTotal && (
-                    <div className="flex items-center justify-between text-xs text-emerald-700 font-bold pt-1 border-t border-slate-200">
-                      <span>Troco a devolver:</span>
-                      <span className="font-mono-numbers text-base font-extrabold">
-                        {formatCurrency(parseFloat(receivedCashStr.replace(',', '.')) - cartTotal)}
-                      </span>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Client info */}
-              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3 space-y-2">
-                <div className="flex items-center justify-between text-xs font-semibold text-slate-700">
-                  <span>Dados do Cliente {paymentMethod === 'fiado' ? '(Obrigatório para venda a prazo)' : '(Opcional)'}</span>
-                </div>
-
-                {/* Quick customer pick suggestions */}
-                {customers && customers.length > 0 && !customerName && (
-                  <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
-                    <span className="text-[10px] text-slate-500 font-medium shrink-0">Cadastrados:</span>
-                    {customers.slice(0, 5).map((c) => (
-                      <button
-                        key={c.id}
-                        type="button"
-                        onClick={() => {
-                          setCustomerName(c.name);
-                          if (c.phone) setCustomerPhone(c.phone);
-                        }}
-                        className="px-2 py-0.5 rounded-lg bg-white border border-slate-200 text-slate-700 text-[11px] font-semibold hover:border-emerald-500 shrink-0"
-                      >
-                        {c.name}
-                      </button>
-                    ))}
-                  </div>
-                )}
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  <input
-                    type="text"
-                    placeholder="Nome do Cliente (ex: Dona Maria)"
-                    value={customerName}
-                    onChange={(e) => setCustomerName(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-white border border-slate-300 text-slate-900 text-xs focus:outline-none focus:border-emerald-500"
-                  />
-                  <input
-                    type="tel"
-                    placeholder="WhatsApp do Cliente (para recibo/cobrança)"
-                    value={customerPhone}
-                    onChange={(e) => setCustomerPhone(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-white border border-slate-300 text-slate-900 text-xs focus:outline-none focus:border-emerald-500"
-                  />
-                </div>
-              </div>
-
-              {/* Submit Button */}
-              <button
-                type="button"
-                onClick={handleFinalizeCartSale}
-                className="w-full min-h-[50px] rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-sm flex items-center justify-center gap-2 shadow-xs touch-press transition-colors"
-              >
-                <Check className="w-5 h-5 stroke-[3]" />
-                <span>CONFIRMAR VENDA ({formatCurrency(cartTotal)})</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Catalog Product Selection Modal/Drawer */}
-      {isCatalogSelectorOpen && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-xs p-0 sm:p-4">
-          <div className="w-full sm:max-w-md bg-white border border-slate-200 rounded-t-3xl sm:rounded-3xl shadow-2xl flex flex-col max-h-[92vh] overflow-hidden">
-            {/* Header */}
-            <div className="px-5 pt-4 pb-3 border-b border-slate-100 flex items-center justify-between shrink-0 bg-white">
-              <div className="flex items-center gap-2">
-                <ShoppingBag className="w-5 h-5 text-emerald-600" />
-                <div>
-                  <h3 className="text-base font-extrabold text-slate-900 leading-tight">
-                    Selecionar Produtos
-                  </h3>
-                  <p className="text-xs text-slate-500">
-                    Selecione os itens do catálogo para a venda
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsCatalogSelectorOpen(false)}
-                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center transition-colors"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* Search and Category Filter */}
-            <div className="p-3 border-b border-slate-100 space-y-2 shrink-0 bg-slate-50/50">
-              <div className="relative">
-                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                <input
-                  type="text"
-                  placeholder="Pesquisar produto pelo nome..."
-                  value={catalogSearch}
-                  onChange={(e) => setCatalogSearch(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2 rounded-xl bg-white border border-slate-200 text-slate-900 text-xs focus:outline-none focus:border-emerald-500 shadow-xs"
-                />
-                {catalogSearch && (
-                  <button
-                    type="button"
-                    onClick={() => setCatalogSearch('')}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                )}
-              </div>
-
-              {/* Category pills */}
-              <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
-                {categories.map((cat) => (
-                  <button
-                    key={`modal-cat-${cat}`}
-                    type="button"
-                    onClick={() => setSelectedCategory(cat)}
-                    className={`px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors ${
-                      selectedCategory === cat
-                        ? 'bg-slate-900 text-white'
-                        : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-100'
-                    }`}
-                  >
-                    {cat === 'todos' ? 'Todos' : cat}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Products List Scrollable Container */}
-            <div className="flex-1 overflow-y-auto p-3 space-y-2 divide-y divide-slate-100">
-              {products.length === 0 ? (
-                <div className="text-center py-8 px-4 space-y-3">
-                  <ShoppingBag className="w-10 h-10 text-slate-300 mx-auto" />
-                  <div>
-                    <h4 className="text-sm font-bold text-slate-800">Nenhum produto cadastrado</h4>
-                    <p className="text-xs text-slate-500 mt-1">
-                      Cadastre seus produtos com valor de venda para selecioná-los facilmente.
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsCatalogSelectorOpen(false);
-                      onNavigateToTab('products');
-                    }}
-                    className="px-4 py-2 rounded-xl bg-emerald-600 text-white font-bold text-xs inline-flex items-center gap-1.5 shadow-xs"
-                  >
-                    <Plus className="w-4 h-4" />
-                    <span>Cadastrar Produtos</span>
-                  </button>
-                </div>
-              ) : (
-                (() => {
-                  const modalFilteredProducts = products.filter((p) => {
-                    const matchCategory = selectedCategory === 'todos' || p.category === selectedCategory;
-                    const matchSearch =
-                      !catalogSearch.trim() ||
-                      p.name.toLowerCase().includes(catalogSearch.toLowerCase().trim()) ||
-                      p.category.toLowerCase().includes(catalogSearch.toLowerCase().trim());
-                    return matchCategory && matchSearch;
-                  });
-
-                  if (modalFilteredProducts.length === 0) {
-                    return (
-                      <div className="text-center py-8 text-slate-400 text-xs">
-                        Nenhum produto encontrado com os filtros selecionados.
-                      </div>
-                    );
-                  }
-
-                  return modalFilteredProducts.map((prod) => {
-                    const inCart = cart.find((i) => i.product.id === prod.id);
-
-                    return (
-                      <div
-                        key={`selector-${prod.id}`}
-                        className={`pt-2.5 first:pt-0 flex items-center justify-between gap-3 p-2 rounded-xl transition-colors ${
-                          inCart ? 'bg-emerald-50/60' : 'hover:bg-slate-50'
-                        }`}
-                      >
-                        <div className="min-w-0 flex-1">
-                          <span className="text-[10px] text-slate-500 font-medium block uppercase tracking-wider">
-                            {prod.category}
-                          </span>
-                          <h4 className="text-xs font-bold text-slate-900 truncate">
-                            {prod.name}
-                          </h4>
-                          <span className="text-xs font-extrabold text-emerald-700 font-mono-numbers block mt-0.5">
-                            {formatCurrency(prod.price)}
-                          </span>
-                        </div>
-
-                        <div className="shrink-0 flex items-center gap-1.5">
-                          {inCart ? (
-                            <div className="flex items-center bg-white border border-emerald-300 rounded-xl shadow-xs overflow-hidden">
-                              <button
-                                type="button"
-                                onClick={() => handleRemoveOne(prod.id)}
-                                className="w-8 h-8 flex items-center justify-center text-slate-600 hover:text-slate-900 active:bg-slate-100"
-                              >
-                                <Minus className="w-3.5 h-3.5" />
-                              </button>
-                              <span className="px-2 text-xs font-extrabold text-emerald-700 font-mono-numbers">
-                                {inCart.quantity}
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => handleAddToCart(prod)}
-                                className="w-8 h-8 flex items-center justify-center text-slate-600 hover:text-slate-900 active:bg-slate-100"
-                              >
-                                <Plus className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => handleAddToCart(prod)}
-                              className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1 shadow-xs touch-press transition-colors"
-                            >
-                              <Plus className="w-3.5 h-3.5" />
-                              <span>Adicionar</span>
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  });
-                })()
-              )}
-            </div>
-
-            {/* Bottom Checkout Action Bar */}
-            <div className="p-3 bg-white border-t border-slate-200 shrink-0 space-y-2">
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-slate-500 font-medium">
-                  {cartItemsCount} {cartItemsCount === 1 ? 'item selecionado' : 'itens selecionados'}
-                </span>
-                <span className="text-base font-black text-emerald-700 font-mono-numbers">
-                  Total: {formatCurrency(cartTotal)}
-                </span>
-              </div>
-
-              <div className="flex items-center gap-2">
-                {cartItemsCount > 0 && (
-                  <button
-                    type="button"
-                    onClick={handleClearCart}
-                    title="Limpar seleção"
-                    className="p-2.5 rounded-xl border border-slate-200 text-rose-600 hover:bg-rose-50 text-xs font-bold"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                )}
-
-                <button
-                  type="button"
-                  disabled={cartItemsCount === 0}
-                  onClick={() => {
-                    setIsCatalogSelectorOpen(false);
-                    setIsCheckoutOpen(true);
-                  }}
-                  className={`flex-1 min-h-[46px] rounded-xl font-extrabold text-xs flex items-center justify-center gap-2 shadow-xs touch-press transition-all ${
-                    cartItemsCount > 0
-                      ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                      : 'bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200'
-                  }`}
-                >
-                  <Check className="w-4 h-4 stroke-[3]" />
-                  <span>
-                    {cartItemsCount > 0
-                      ? `AVANÇAR PARA PAGAMENTO (${formatCurrency(cartTotal)})`
-                      : 'SELECIONE AO MENOS 1 ITEM'}
-                  </span>
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

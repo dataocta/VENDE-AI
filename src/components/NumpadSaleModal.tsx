@@ -121,7 +121,7 @@ export const NumpadSaleModal: React.FC<NumpadSaleModalProps> = ({
         <div className="sticky top-0 bg-white/95 backdrop-blur-md px-5 pt-4 pb-2 border-b border-slate-200 flex items-center justify-between z-10">
           <div>
             <h2 className="text-base font-bold text-slate-900 flex items-center gap-1.5">
-              <span>Registrar Venda por Valor</span>
+              <span>Registrar Venda</span>
             </h2>
             <p className="text-xs text-slate-500">Digite o valor da venda e confirme o recebimento</p>
           </div>

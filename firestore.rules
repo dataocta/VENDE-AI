@@ -1,0 +1,101 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // Connection validation document
+    match /test/{docId} {
+      allow get: if true;
+    }
+
+    // User profiles
+    match /users/{userId} {
+      allow get: if isOwner(userId) && isValidId(userId);
+      allow create: if isOwner(userId) && isValidId(userId);
+      allow update: if isOwner(userId) && isValidId(userId);
+      allow delete: if isOwner(userId) && isValidId(userId);
+      allow list: if false;
+    }
+
+    // Products
+    match /products/{productId} {
+      allow get: if isSignedIn() && isValidId(productId) && resource.data.userId == request.auth.uid;
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() && isValidId(productId) && request.resource.data.userId == request.auth.uid;
+      allow update: if isSignedIn() && isValidId(productId) && resource.data.userId == request.auth.uid && request.resource.data.userId == request.auth.uid;
+      allow delete: if isSignedIn() && isValidId(productId) && resource.data.userId == request.auth.uid;
+    }
+
+    // Sales
+    match /sales/{saleId} {
+      allow get: if isSignedIn() && isValidId(saleId) && resource.data.userId == request.auth.uid;
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() && isValidId(saleId) && request.resource.data.userId == request.auth.uid;
+      allow update: if isSignedIn() && isValidId(saleId) && resource.data.userId == request.auth.uid && request.resource.data.userId == request.auth.uid;
+      allow delete: if isSignedIn() && isValidId(saleId) && resource.data.userId == request.auth.uid;
+    }
+
+    // Expenses
+    match /expenses/{expenseId} {
+      allow get: if isSignedIn() && isValidId(expenseId) && resource.data.userId == request.auth.uid;
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() && isValidId(expenseId) && request.resource.data.userId == request.auth.uid;
+      allow update: if isSignedIn() && isValidId(expenseId) && resource.data.userId == request.auth.uid && request.resource.data.userId == request.auth.uid;
+      allow delete: if isSignedIn() && isValidId(expenseId) && resource.data.userId == request.auth.uid;
+    }
+
+    // Customers
+    match /customers/{customerId} {
+      allow get: if isSignedIn() && isValidId(customerId) && resource.data.userId == request.auth.uid;
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() && isValidId(customerId) && request.resource.data.userId == request.auth.uid;
+      allow update: if isSignedIn() && isValidId(customerId) && resource.data.userId == request.auth.uid && request.resource.data.userId == request.auth.uid;
+      allow delete: if isSignedIn() && isValidId(customerId) && resource.data.userId == request.auth.uid;
+    }
+
+    // Debts
+    match /debts/{debtId} {
+      allow get: if isSignedIn() && isValidId(debtId) && resource.data.userId == request.auth.uid;
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() && isValidId(debtId) && request.resource.data.userId == request.auth.uid;
+      allow update: if isSignedIn() && isValidId(debtId) && resource.data.userId == request.auth.uid && request.resource.data.userId == request.auth.uid;
+      allow delete: if isSignedIn() && isValidId(debtId) && resource.data.userId == request.auth.uid;
+    }
+
+    // Daily Register
+    match /registers/{registerId} {
+      allow get: if isSignedIn() && isValidId(registerId) && resource.data.userId == request.auth.uid;
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() && isValidId(registerId) && request.resource.data.userId == request.auth.uid;
+      allow update: if isSignedIn() && isValidId(registerId) && resource.data.userId == request.auth.uid && request.resource.data.userId == request.auth.uid;
+      allow delete: if isSignedIn() && isValidId(registerId) && resource.data.userId == request.auth.uid;
+    }
+
+    // Business Settings
+    match /settings/{userId} {
+      allow get: if isOwner(userId) && isValidId(userId);
+      allow create: if isOwner(userId) && isValidId(userId);
+      allow update: if isOwner(userId) && isValidId(userId);
+      allow delete: if isOwner(userId) && isValidId(userId);
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+    }
+  }
+}

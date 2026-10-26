@@ -1,0 +1,176 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User account and profile data",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "businessName": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "trialEndsAt": { "type": "string" },
+        "subscriptionStatus": { "type": "string" },
+        "planPrice": { "type": "number" }
+      },
+      "required": ["userId", "name", "email"]
+    },
+    "Product": {
+      "title": "Product",
+      "description": "Store products for sale",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "price": { "type": "number" },
+        "costPrice": { "type": "number" },
+        "category": { "type": "string" },
+        "stockQuantity": { "type": "number" },
+        "minStockAlert": { "type": "number" },
+        "unit": { "type": "string" },
+        "barcode": { "type": "string" },
+        "active": { "type": "boolean" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "userId", "name", "price"]
+    },
+    "Sale": {
+      "title": "Sale",
+      "description": "Sales records and transactions",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "code": { "type": "string" },
+        "date": { "type": "string" },
+        "items": { "type": "array" },
+        "totalAmount": { "type": "number" },
+        "totalCost": { "type": "number" },
+        "paymentMethod": { "type": "string" },
+        "amountReceived": { "type": "number" },
+        "changeGiven": { "type": "number" },
+        "customerName": { "type": "string" },
+        "customerPhone": { "type": "string" },
+        "notes": { "type": "string" },
+        "status": { "type": "string" }
+      },
+      "required": ["id", "userId", "code", "date", "totalAmount", "paymentMethod", "status"]
+    },
+    "Expense": {
+      "title": "Expense",
+      "description": "Daily business expenses",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "description": { "type": "string" },
+        "amount": { "type": "number" },
+        "category": { "type": "string" },
+        "date": { "type": "string" },
+        "notes": { "type": "string" }
+      },
+      "required": ["id", "userId", "description", "amount", "date"]
+    },
+    "Customer": {
+      "title": "Customer",
+      "description": "Registered clients and contacts",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "phone": { "type": "string" },
+        "addressOrSpot": { "type": "string" },
+        "notes": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "userId", "name"]
+    },
+    "CustomerDebt": {
+      "title": "CustomerDebt",
+      "description": "Credit and fiado records for customers",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "phone": { "type": "string" },
+        "addressOrSpot": { "type": "string" },
+        "totalOwed": { "type": "number" },
+        "lastPurchaseDate": { "type": "string" },
+        "dueDate": { "type": "string" },
+        "history": { "type": "array" }
+      },
+      "required": ["id", "userId", "name", "totalOwed"]
+    },
+    "DailyRegister": {
+      "title": "DailyRegister",
+      "description": "Daily register open and close entries",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "dateStr": { "type": "string" },
+        "openingBalance": { "type": "number" },
+        "isClosed": { "type": "boolean" },
+        "closedAt": { "type": "string" },
+        "notes": { "type": "string" }
+      },
+      "required": ["id", "userId", "dateStr"]
+    },
+    "BusinessSettings": {
+      "title": "BusinessSettings",
+      "description": "Business preferences and settings",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "businessName": { "type": "string" },
+        "sellerName": { "type": "string" },
+        "phone": { "type": "string" },
+        "pixKey": { "type": "string" },
+        "dailyGoal": { "type": "number" },
+        "soundEnabled": { "type": "boolean" },
+        "highContrastMode": { "type": "boolean" }
+      },
+      "required": ["userId"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "User account document"
+    },
+    "/products/{productId}": {
+      "schema": "Product",
+      "description": "User products collection"
+    },
+    "/sales/{saleId}": {
+      "schema": "Sale",
+      "description": "User sales collection"
+    },
+    "/expenses/{expenseId}": {
+      "schema": "Expense",
+      "description": "User expenses collection"
+    },
+    "/customers/{customerId}": {
+      "schema": "Customer",
+      "description": "User customers collection"
+    },
+    "/debts/{debtId}": {
+      "schema": "CustomerDebt",
+      "description": "User debts collection"
+    },
+    "/registers/{registerId}": {
+      "schema": "DailyRegister",
+      "description": "User daily register collection"
+    },
+    "/settings/{userId}": {
+      "schema": "BusinessSettings",
+      "description": "User settings collection"
+    }
+  }
+}
