@@ -520,7 +520,7 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
               </button>
             </div>
 
-            <form onSubmit={handleSaveProductForm} className="p-5 pb-16 space-y-3.5 overflow-y-auto flex-1 overscroll-contain">
+            <form id="product-form" onSubmit={handleSaveProductForm} className="p-5 space-y-3.5 overflow-y-auto flex-1 overscroll-contain">
               <div>
                 <label className="text-xs font-semibold text-slate-600 block mb-1">
                   Nome do Produto *
@@ -623,24 +623,26 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
                   </span>
                 </div>
               )}
-
-              <div className="pt-2 pb-6 flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIsAddOpen(false)}
-                  className="px-4 min-h-[48px] rounded-2xl border border-slate-300 text-slate-700 font-bold text-xs hover:bg-slate-50 transition-colors"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 min-h-[48px] rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs flex items-center justify-center gap-1.5 shadow-xs touch-press transition-colors tracking-wide"
-                >
-                  <Check className="w-4 h-4 stroke-[3]" />
-                  <span>{editingProduct ? 'SALVAR ALTERAÇÕES' : 'CADASTRAR PRODUTO'}</span>
-                </button>
-              </div>
             </form>
+
+            {/* Sticky Action Footer */}
+            <div className="shrink-0 bg-white border-t border-slate-100 p-4 flex items-center gap-2 z-20 pb-safe">
+              <button
+                type="button"
+                onClick={() => setIsAddOpen(false)}
+                className="px-4 min-h-[46px] rounded-2xl border border-slate-300 text-slate-700 font-bold text-xs hover:bg-slate-50 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                form="product-form"
+                className="flex-1 min-h-[46px] rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs flex items-center justify-center gap-1.5 shadow-xs touch-press transition-colors tracking-wide"
+              >
+                <Check className="w-4 h-4 stroke-[3]" />
+                <span>{editingProduct ? 'SALVAR ALTERAÇÕES' : 'CADASTRAR PRODUTO'}</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

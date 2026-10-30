@@ -529,6 +529,7 @@ export default function App() {
             onCompleteSale={handleCompleteSale}
             onCancelSale={handleCancelSale}
             onOpenNumpadSale={() => setIsNumpadOpen(true)}
+            onOpenNewExpense={() => setIsExpenseOpen(true)}
             onNavigateToTab={(tab) => setActiveTab(tab)}
             onUpdateSettings={handleUpdateSettings}
           />
@@ -599,6 +600,7 @@ export default function App() {
         onCompleteSale={handleCompleteSale}
         soundEnabled={settings.soundEnabled}
         customers={customers}
+        products={products}
       />
 
       <SaleSuccessModal

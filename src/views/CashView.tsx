@@ -13,6 +13,7 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   Filter,
+  Tag,
 } from 'lucide-react';
 import { DailyRegister, BusinessSettings, Sale, Expense } from '../types';
 import { formatCurrency, formatDateOnlyBR, formatTimeOnlyBR } from '../utils/receipt';
@@ -108,6 +109,25 @@ export const CashView: React.FC<CashViewProps> = ({
   const totalSales = filteredSales.reduce((acc, s) => acc + s.totalAmount, 0);
   const totalExpenses = filteredExpenses.reduce((acc, e) => acc + e.amount, 0);
   const netProfit = totalSales - totalExpenses;
+
+  // Ranking of most sold products in the filtered period
+  const topSoldProducts = useMemo(() => {
+    const counts: Record<string, { name: string; quantity: number; revenue: number }> = {};
+    filteredSales.forEach((sale) => {
+      sale.items.forEach((item) => {
+        const key = item.name.trim();
+        if (!key) return;
+        if (!counts[key]) {
+          counts[key] = { name: key, quantity: 0, revenue: 0 };
+        }
+        counts[key].quantity += item.quantity || 1;
+        counts[key].revenue += item.subtotal || (item.unitPrice * (item.quantity || 1));
+      });
+    });
+    return Object.values(counts)
+      .sort((a, b) => b.quantity - a.quantity)
+      .slice(0, 5);
+  }, [filteredSales]);
 
   // Breakdown by payment methods for filtered period
   const byMethod: Record<string, number> = {
@@ -361,7 +381,52 @@ export const CashView: React.FC<CashViewProps> = ({
         </div>
       </div>
 
-      {/* 3. Lista de Transações no Período (Vendas e Despesas) */}
+      {/* 3. Ranking dos Produtos Mais Vendidos no Período */}
+      {topSoldProducts.length > 0 && (
+        <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-xs space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+              <Tag className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Produtos Mais Vendidos ({periodLabel})</span>
+            </h3>
+            <span className="text-[11px] text-slate-400 font-medium">Top {topSoldProducts.length}</span>
+          </div>
+
+          <div className="space-y-2">
+            {topSoldProducts.map((p, idx) => (
+              <div
+                key={p.name}
+                className="flex items-center justify-between p-2.5 rounded-2xl bg-slate-50 border border-slate-100 text-xs"
+              >
+                <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                  <span
+                    className={`w-6 h-6 rounded-lg flex items-center justify-center font-black text-[11px] shrink-0 ${
+                      idx === 0
+                        ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                        : idx === 1
+                        ? 'bg-slate-200 text-slate-700'
+                        : 'bg-slate-100 text-slate-500'
+                    }`}
+                  >
+                    {idx + 1}º
+                  </span>
+                  <div className="min-w-0">
+                    <span className="font-bold text-slate-900 truncate block">{p.name}</span>
+                    <span className="text-[11px] text-slate-500">
+                      {p.quantity} {p.quantity === 1 ? 'vendido' : 'vendidos'}
+                    </span>
+                  </div>
+                </div>
+                <span className="font-extrabold text-emerald-700 font-mono-numbers shrink-0">
+                  {formatCurrency(p.revenue)}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* 4. Lista de Transações no Período (Vendas e Despesas) */}
       <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-xs space-y-3">
         <div className="flex items-center justify-between">
           <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
@@ -378,20 +443,25 @@ export const CashView: React.FC<CashViewProps> = ({
           <div className="divide-y divide-slate-100 max-h-80 overflow-y-auto overscroll-contain">
             {/* Merged and sorted transactions */}
             {[
-              ...filteredSales.map((s) => ({
-                id: s.id,
-                type: 'venda' as const,
-                title: `${s.code} · ${s.items.map((i) => `${i.quantity}x ${i.name}`).join(', ') || 'Venda'}`,
-                subtitle: `${formatDateOnlyBR(s.date.split('T')[0])} ${formatTimeOnlyBR(s.date)} · ${
-                  s.paymentMethod === 'fiado' ? 'A Prazo' : s.paymentMethod.replace('_', ' ')
-                }${s.customerName ? ` · ${s.customerName}` : ''}`,
-                amount: s.totalAmount,
-                date: s.date,
-              })),
+              ...filteredSales.map((s) => {
+                const itemsSummary = s.items.map((i) => `${i.quantity}x ${i.name}`).join(', ');
+                return {
+                  id: s.id,
+                  type: 'venda' as const,
+                  productName: itemsSummary || 'Venda Balcão',
+                  code: s.code,
+                  subtitle: `${formatDateOnlyBR(s.date.split('T')[0])} ${formatTimeOnlyBR(s.date)} · ${
+                    s.paymentMethod === 'fiado' ? 'A Prazo' : s.paymentMethod.replace('_', ' ')
+                  }${s.customerName ? ` · ${s.customerName}` : ''}`,
+                  amount: s.totalAmount,
+                  date: s.date,
+                };
+              }),
               ...filteredExpenses.map((e) => ({
                 id: e.id,
                 type: 'despesa' as const,
-                title: e.description || 'Despesa',
+                productName: e.description || 'Despesa',
+                code: '',
                 subtitle: `${formatDateOnlyBR(e.date.split('T')[0])} ${formatTimeOnlyBR(e.date)} · ${e.category} (${e.paymentMethod})`,
                 amount: e.amount,
                 date: e.date,
@@ -415,8 +485,15 @@ export const CashView: React.FC<CashViewProps> = ({
                       )}
                     </div>
                     <div className="min-w-0">
-                      <div className="font-bold text-slate-800 truncate">
-                        {tx.title}
+                      <div className="flex items-center gap-1.5 truncate">
+                        {tx.code && (
+                          <span className="text-[10px] font-mono font-bold text-slate-500 bg-slate-100 px-1 rounded shrink-0">
+                            {tx.code}
+                          </span>
+                        )}
+                        <span className="font-bold text-slate-900 truncate">
+                          {tx.productName}
+                        </span>
                       </div>
                       <div className="text-[11px] text-slate-400 truncate">
                         {tx.subtitle}

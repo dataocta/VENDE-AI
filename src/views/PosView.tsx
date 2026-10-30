@@ -9,6 +9,7 @@ import {
   Edit2,
   Target,
   CheckCircle2,
+  ArrowDownRight,
 } from 'lucide-react';
 import { Product, Sale, BusinessSettings, Customer, Expense } from '../types';
 import { formatCurrency, getPaymentMethodLabel, generateWhatsAppSaleReceipt } from '../utils/receipt';
@@ -23,6 +24,7 @@ interface PosViewProps {
   onCompleteSale: (sale: Sale) => void;
   onCancelSale: (saleId: string) => void;
   onOpenNumpadSale: () => void;
+  onOpenNewExpense?: () => void;
   onNavigateToTab: (tab: any) => void;
   onUpdateSettings?: (settings: BusinessSettings) => void;
 }
@@ -33,6 +35,7 @@ export const PosView: React.FC<PosViewProps> = ({
   settings,
   onCancelSale,
   onOpenNumpadSale,
+  onOpenNewExpense,
   onNavigateToTab,
   onUpdateSettings,
 }) => {
@@ -219,15 +222,24 @@ export const PosView: React.FC<PosViewProps> = ({
         </div>
       </div>
 
-      {/* 2. Fast Primary Action: Registrar Venda (Do jeito antigo, teclado numérico direto) */}
-      <div className="grid grid-cols-1 gap-2.5">
+      {/* 2. Primary Fast Actions: Registrar Venda e Registrar Despesa */}
+      <div className="grid grid-cols-2 gap-2.5">
         <button
           type="button"
           onClick={onOpenNumpadSale}
-          className="w-full min-h-[52px] rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-sm flex items-center justify-center gap-2 shadow-xs touch-press transition-colors tracking-wide"
+          className="w-full min-h-[52px] rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-xs touch-press transition-colors tracking-wide"
         >
-          <Zap className="w-4 h-4 fill-white stroke-none" />
+          <Zap className="w-4 h-4 fill-white stroke-none shrink-0" />
           <span>REGISTRAR VENDA</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={onOpenNewExpense}
+          className="w-full min-h-[52px] rounded-2xl bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 font-extrabold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-xs touch-press transition-colors tracking-wide"
+        >
+          <ArrowDownRight className="w-4 h-4 stroke-[2.5] shrink-0" />
+          <span>REGISTRAR DESPESA</span>
         </button>
       </div>
 

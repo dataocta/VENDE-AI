@@ -713,8 +713,9 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
       {/* 5. Modal / Drawer para Cadastrar ou Editar Cliente */}
       {isNewCustomerOpen && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-150">
-          <div className="w-full max-w-md bg-white rounded-t-3xl sm:rounded-3xl border border-slate-200 p-5 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto no-scrollbar">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+          <div className="w-full max-w-md bg-white rounded-t-3xl sm:rounded-3xl border border-slate-200 shadow-2xl flex flex-col max-h-[90vh] overflow-hidden">
+            {/* Header */}
+            <div className="shrink-0 flex items-center justify-between px-5 pt-4 pb-3 border-b border-slate-100 bg-white">
               <div className="flex items-center gap-2">
                 <Users className="w-5 h-5 text-emerald-600" />
                 <h3 className="text-base font-extrabold text-slate-900">
@@ -724,13 +725,14 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
               <button
                 type="button"
                 onClick={() => setIsNewCustomerOpen(false)}
-                className="p-1 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100"
+                className="p-1.5 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleSaveCustomerForm} className="space-y-3.5">
+            {/* Scrollable Form Body */}
+            <form id="customer-form" onSubmit={handleSaveCustomerForm} className="flex-1 overflow-y-auto p-5 space-y-3.5 overscroll-contain">
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
                   Nome do Cliente *
@@ -820,41 +822,44 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                   className="w-full px-3.5 py-2 rounded-xl border border-slate-300 bg-white text-slate-900 text-xs focus:outline-none focus:border-emerald-500 resize-none font-medium"
                 />
               </div>
-
-              <div className="pt-2 flex items-center justify-between gap-2">
-                {editingCustomer && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (confirm(`Excluir ${editingCustomer.name}?`)) {
-                        onDeleteCustomer(editingCustomer.id);
-                        setIsNewCustomerOpen(false);
-                      }
-                    }}
-                    className="p-2.5 rounded-xl text-rose-600 hover:bg-rose-50 border border-rose-200 text-xs font-bold flex items-center gap-1"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                    <span>Excluir</span>
-                  </button>
-                )}
-
-                <div className="flex-1 flex gap-2 justify-end">
-                  <button
-                    type="button"
-                    onClick={() => setIsNewCustomerOpen(false)}
-                    className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-100 text-xs font-bold"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    type="submit"
-                    className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold shadow-xs transition-colors"
-                  >
-                    Salvar Cliente
-                  </button>
-                </div>
-              </div>
             </form>
+
+            {/* Sticky Action Footer - Always visible and accessible */}
+            <div className="shrink-0 bg-white border-t border-slate-100 p-4 flex items-center justify-between gap-2.5 z-20 pb-safe">
+              {editingCustomer && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (confirm(`Excluir ${editingCustomer.name}?`)) {
+                      onDeleteCustomer(editingCustomer.id);
+                      setIsNewCustomerOpen(false);
+                    }
+                  }}
+                  className="p-2.5 rounded-xl text-rose-600 hover:bg-rose-50 border border-rose-200 text-xs font-bold flex items-center gap-1 shrink-0"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  <span>Excluir</span>
+                </button>
+              )}
+
+              <div className="flex-1 flex gap-2 justify-end">
+                <button
+                  type="button"
+                  onClick={() => setIsNewCustomerOpen(false)}
+                  className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-100 text-xs font-bold"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  form="customer-form"
+                  className="flex-1 max-w-[200px] py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold shadow-sm transition-colors flex items-center justify-center gap-1.5"
+                >
+                  <Users className="w-4 h-4" />
+                  <span>Salvar Cliente</span>
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
