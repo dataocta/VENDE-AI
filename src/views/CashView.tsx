@@ -14,9 +14,15 @@ import {
   ArrowDownRight,
   Filter,
   Tag,
+  Trash2,
+  Edit,
+  SlidersHorizontal,
+  Search,
 } from 'lucide-react';
 import { DailyRegister, BusinessSettings, Sale, Expense } from '../types';
 import { formatCurrency, formatDateOnlyBR, formatTimeOnlyBR } from '../utils/receipt';
+import { EditSaleModal } from '../components/EditSaleModal';
+import { EditExpenseModal } from '../components/EditExpenseModal';
 
 type DateFilterOption = 'hoje' | 'ontem' | '7dias' | 'mes' | 'todos' | 'custom';
 
@@ -28,6 +34,10 @@ interface CashViewProps {
   dateStr: string; // Today's date YYYY-MM-DD
   onUpdateOpeningBalance: (amount: number) => void;
   onOpenCloseRegister: () => void;
+  onUpdateSale?: (sale: Sale) => void;
+  onDeleteSale?: (saleId: string) => void;
+  onUpdateExpense?: (expense: Expense) => void;
+  onDeleteExpense?: (expenseId: string) => void;
 }
 
 export const CashView: React.FC<CashViewProps> = ({
@@ -38,11 +48,22 @@ export const CashView: React.FC<CashViewProps> = ({
   dateStr,
   onUpdateOpeningBalance,
   onOpenCloseRegister,
+  onUpdateSale,
+  onDeleteSale,
+  onUpdateExpense,
+  onDeleteExpense,
 }) => {
   const [filterOption, setFilterOption] = useState<DateFilterOption>('hoje');
   const [customDate, setCustomDate] = useState<string>(dateStr);
   const [isEditingOpening, setIsEditingOpening] = useState(false);
   const [openingStr, setOpeningStr] = useState(register.openingBalance.toString());
+
+  // Editing state for lancamentos (Vendas e Despesas)
+  const [editingSale, setEditingSale] = useState<Sale | null>(null);
+  const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
+  const [viewSubTab, setViewSubTab] = useState<'resumo' | 'lancamentos'>('resumo');
+  const [lancamentoFilterType, setLancamentoFilterType] = useState<'todos' | 'vendas' | 'despesas'>('todos');
+  const [lancamentoSearch, setLancamentoSearch] = useState('');
 
   // Date calculation utilities
   const yesterdayStr = useMemo(() => {
@@ -157,6 +178,58 @@ export const CashView: React.FC<CashViewProps> = ({
     setIsEditingOpening(false);
   };
 
+  // Merged transactions with original references for full editing/deleting capability
+  const allTransactions = useMemo(() => {
+    type TxItem =
+      | { type: 'venda'; id: string; date: string; amount: number; sale: Sale; title: string; subtitle: string; code: string; paymentMethod: string; customerName?: string }
+      | { type: 'despesa'; id: string; date: string; amount: number; expense: Expense; title: string; subtitle: string; code: string; paymentMethod: string; customerName?: undefined };
+
+    const list: TxItem[] = [
+      ...filteredSales.map((s) => ({
+        type: 'venda' as const,
+        id: s.id,
+        date: s.date,
+        amount: s.totalAmount,
+        sale: s,
+        title: s.items.map((i) => `${i.quantity}x ${i.name}`).join(', ') || 'Venda Balcão',
+        subtitle: `${formatDateOnlyBR(s.date.split('T')[0])} ${formatTimeOnlyBR(s.date)}${s.customerName ? ` · Cliente: ${s.customerName}` : ''}`,
+        code: s.code || '',
+        paymentMethod: s.paymentMethod === 'fiado' ? 'A Prazo' : s.paymentMethod.replace('_', ' '),
+        customerName: s.customerName,
+      })),
+      ...filteredExpenses.map((e) => ({
+        type: 'despesa' as const,
+        id: e.id,
+        date: e.date,
+        amount: e.amount,
+        expense: e,
+        title: e.description || 'Despesa',
+        subtitle: `${formatDateOnlyBR(e.date.split('T')[0])} ${formatTimeOnlyBR(e.date)} · Categoria: ${e.category}`,
+        code: '',
+        paymentMethod: e.paymentMethod,
+      })),
+    ];
+
+    return list.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  }, [filteredSales, filteredExpenses]);
+
+  // Filtered by type and search query in the lancamentos view
+  const visibleTransactions = useMemo(() => {
+    return allTransactions.filter((tx) => {
+      if (lancamentoFilterType === 'vendas' && tx.type !== 'venda') return false;
+      if (lancamentoFilterType === 'despesas' && tx.type !== 'despesa') return false;
+      if (lancamentoSearch.trim()) {
+        const q = lancamentoSearch.toLowerCase();
+        const matchesTitle = tx.title.toLowerCase().includes(q);
+        const matchesSub = tx.subtitle.toLowerCase().includes(q);
+        const matchesCode = tx.code.toLowerCase().includes(q);
+        const matchesMethod = tx.paymentMethod.toLowerCase().includes(q);
+        return matchesTitle || matchesSub || matchesCode || matchesMethod;
+      }
+      return true;
+    });
+  }, [allTransactions, lancamentoFilterType, lancamentoSearch]);
+
   const handleShareSummary = () => {
     const lines = [
       `📊 *RESUMO DE CAIXA & LUCRO*`,
@@ -181,6 +254,35 @@ export const CashView: React.FC<CashViewProps> = ({
 
   return (
     <div className="space-y-4 pb-28">
+      {/* Sub-Tab Selector: Resumo vs Lançamentos */}
+      <div className="grid grid-cols-2 p-1 bg-slate-100 border border-slate-200 rounded-2xl">
+        <button
+          type="button"
+          onClick={() => setViewSubTab('resumo')}
+          className={`py-2 text-xs font-bold rounded-xl transition-all ${
+            viewSubTab === 'resumo'
+              ? 'bg-white text-slate-900 shadow-xs'
+              : 'text-slate-500 hover:text-slate-900'
+          }`}
+        >
+          Resumo do Caixa
+        </button>
+        <button
+          type="button"
+          onClick={() => setViewSubTab('lancamentos')}
+          className={`py-2 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 ${
+            viewSubTab === 'lancamentos'
+              ? 'bg-white text-slate-900 shadow-xs'
+              : 'text-slate-500 hover:text-slate-900'
+          }`}
+        >
+          <span>Todos os Lançamentos</span>
+          <span className="px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-black">
+            {filteredSales.length + filteredExpenses.length}
+          </span>
+        </button>
+      </div>
+
       {/* 0. Filtro por Data (Requisito Solicitado) */}
       <div className="bg-white border border-slate-200 rounded-2xl p-3 shadow-xs space-y-2.5">
         <div className="flex items-center justify-between">
@@ -273,246 +375,473 @@ export const CashView: React.FC<CashViewProps> = ({
         </div>
       </div>
 
-      {/* 1. Big Net Profit Card (Limpo, Básico e Direto) */}
-      <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-xs space-y-4">
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-            {filterOption === 'hoje' ? 'Lucro de Hoje' : `Lucro (${periodLabel})`}
-          </span>
+      {viewSubTab === 'resumo' ? (
+        <>
+          {/* 1. Big Net Profit Card (Limpo, Básico e Direto) */}
+          <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-xs space-y-4">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                {filterOption === 'hoje' ? 'Lucro de Hoje' : `Lucro (${periodLabel})`}
+              </span>
 
-          <button
-            type="button"
-            onClick={handleShareSummary}
-            className="text-xs text-emerald-700 hover:text-emerald-800 font-bold flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 transition-colors"
-          >
-            <Share2 className="w-3.5 h-3.5" />
-            <span>Compartilhar</span>
-          </button>
-        </div>
-
-        {/* Big Profit Display */}
-        <div>
-          <div
-            className={`text-4xl sm:text-5xl font-black font-mono-numbers tracking-tight ${
-              netProfit >= 0 ? 'text-emerald-600' : 'text-rose-600'
-            }`}
-          >
-            {formatCurrency(netProfit)}
-          </div>
-          <p className="text-xs text-slate-500 mt-1">
-            Vendas ({formatCurrency(totalSales)}) menos Gastos ({formatCurrency(totalExpenses)})
-          </p>
-        </div>
-
-        {/* Two Clean Indicators */}
-        <div className="grid grid-cols-2 gap-3 pt-3 border-t border-slate-100">
-          <div className="bg-emerald-50/60 border border-emerald-100 rounded-2xl p-3">
-            <div className="flex items-center gap-1.5 text-xs text-emerald-800 font-semibold mb-0.5">
-              <ArrowUpRight className="w-3.5 h-3.5 text-emerald-600" />
-              <span>Entradas ({filteredSales.length})</span>
-            </div>
-            <div className="text-xl font-extrabold text-emerald-700 font-mono-numbers">
-              {formatCurrency(totalSales)}
-            </div>
-          </div>
-
-          <div className="bg-rose-50/60 border border-rose-100 rounded-2xl p-3">
-            <div className="flex items-center gap-1.5 text-xs text-rose-800 font-semibold mb-0.5">
-              <ArrowDownRight className="w-3.5 h-3.5 text-rose-600" />
-              <span>Gastos ({filteredExpenses.length})</span>
-            </div>
-            <div className="text-xl font-extrabold text-rose-700 font-mono-numbers">
-              {formatCurrency(totalExpenses)}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* 2. Onde está o dinheiro (Distribuição de Meios de Pagamento) */}
-      <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-xs space-y-3">
-        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
-          Formas de Pagamento Recebidas ({periodLabel})
-        </h3>
-
-        <div className="grid grid-cols-2 gap-2.5">
-          {/* Dinheiro */}
-          <div className="p-3 rounded-2xl border border-slate-200 bg-slate-50/50 flex flex-col justify-between">
-            <div className="flex items-center gap-1.5 text-xs text-slate-600 font-medium">
-              <Banknote className="w-3.5 h-3.5 text-emerald-600" />
-              <span>Dinheiro</span>
-            </div>
-            <div className="text-lg font-black text-slate-900 font-mono-numbers mt-1">
-              {formatCurrency(byMethod.dinheiro)}
-            </div>
-          </div>
-
-          {/* PIX */}
-          <div className="p-3 rounded-2xl border border-slate-200 bg-slate-50/50 flex flex-col justify-between">
-            <div className="flex items-center gap-1.5 text-xs text-slate-600 font-medium">
-              <QrCode className="w-3.5 h-3.5 text-emerald-600" />
-              <span>PIX</span>
-            </div>
-            <div className="text-lg font-black text-slate-900 font-mono-numbers mt-1">
-              {formatCurrency(byMethod.pix)}
-            </div>
-          </div>
-
-          {/* Cartões (Débito + Crédito) */}
-          <div className="p-3 rounded-2xl border border-slate-200 bg-slate-50/50 flex flex-col justify-between">
-            <div className="flex items-center gap-1.5 text-xs text-slate-600 font-medium">
-              <CreditCard className="w-3.5 h-3.5 text-emerald-600" />
-              <span>Cartões</span>
-            </div>
-            <div className="text-lg font-black text-slate-900 font-mono-numbers mt-1">
-              {formatCurrency(totalCards)}
-            </div>
-          </div>
-
-          {/* A Prazo */}
-          <div className="p-3 rounded-2xl border border-slate-200 bg-slate-50/50 flex flex-col justify-between">
-            <div className="flex items-center gap-1.5 text-xs text-amber-700 font-medium">
-              <BookUser className="w-3.5 h-3.5 text-amber-600" />
-              <span>A Prazo</span>
-            </div>
-            <div className="text-lg font-black text-amber-700 font-mono-numbers mt-1">
-              {formatCurrency(byMethod.fiado)}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* 3. Ranking dos Produtos Mais Vendidos no Período */}
-      {topSoldProducts.length > 0 && (
-        <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-xs space-y-3">
-          <div className="flex items-center justify-between">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
-              <Tag className="w-3.5 h-3.5 text-emerald-600" />
-              <span>Produtos Mais Vendidos ({periodLabel})</span>
-            </h3>
-            <span className="text-[11px] text-slate-400 font-medium">Top {topSoldProducts.length}</span>
-          </div>
-
-          <div className="space-y-2">
-            {topSoldProducts.map((p, idx) => (
-              <div
-                key={p.name}
-                className="flex items-center justify-between p-2.5 rounded-2xl bg-slate-50 border border-slate-100 text-xs"
+              <button
+                type="button"
+                onClick={handleShareSummary}
+                className="text-xs text-emerald-700 hover:text-emerald-800 font-bold flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 transition-colors"
               >
-                <div className="flex items-center gap-2.5 min-w-0 pr-2">
-                  <span
-                    className={`w-6 h-6 rounded-lg flex items-center justify-center font-black text-[11px] shrink-0 ${
-                      idx === 0
-                        ? 'bg-amber-100 text-amber-800 border border-amber-200'
-                        : idx === 1
-                        ? 'bg-slate-200 text-slate-700'
-                        : 'bg-slate-100 text-slate-500'
-                    }`}
+                <Share2 className="w-3.5 h-3.5" />
+                <span>Compartilhar</span>
+              </button>
+            </div>
+
+            {/* Big Profit Display */}
+            <div>
+              <div
+                className={`text-4xl sm:text-5xl font-black font-mono-numbers tracking-tight ${
+                  netProfit >= 0 ? 'text-emerald-600' : 'text-rose-600'
+                }`}
+              >
+                {formatCurrency(netProfit)}
+              </div>
+              <p className="text-xs text-slate-500 mt-1">
+                Vendas ({formatCurrency(totalSales)}) menos Gastos ({formatCurrency(totalExpenses)})
+              </p>
+            </div>
+
+            {/* Two Clean Indicators */}
+            <div className="grid grid-cols-2 gap-3 pt-3 border-t border-slate-100">
+              <div className="bg-emerald-50/60 border border-emerald-100 rounded-2xl p-3">
+                <div className="flex items-center gap-1.5 text-xs text-emerald-800 font-semibold mb-0.5">
+                  <ArrowUpRight className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Entradas ({filteredSales.length})</span>
+                </div>
+                <div className="text-xl font-extrabold text-emerald-700 font-mono-numbers">
+                  {formatCurrency(totalSales)}
+                </div>
+              </div>
+
+              <div className="bg-rose-50/60 border border-rose-100 rounded-2xl p-3">
+                <div className="flex items-center gap-1.5 text-xs text-rose-800 font-semibold mb-0.5">
+                  <ArrowDownRight className="w-3.5 h-3.5 text-rose-600" />
+                  <span>Gastos ({filteredExpenses.length})</span>
+                </div>
+                <div className="text-xl font-extrabold text-rose-700 font-mono-numbers">
+                  {formatCurrency(totalExpenses)}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* 2. Onde está o dinheiro (Distribuição de Meios de Pagamento) */}
+          <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-xs space-y-3">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
+              Formas de Pagamento Recebidas ({periodLabel})
+            </h3>
+
+            <div className="grid grid-cols-2 gap-2.5">
+              {/* Dinheiro */}
+              <div className="p-3 rounded-2xl border border-slate-200 bg-slate-50/50 flex flex-col justify-between">
+                <div className="flex items-center gap-1.5 text-xs text-slate-600 font-medium">
+                  <Banknote className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Dinheiro</span>
+                </div>
+                <div className="text-lg font-black text-slate-900 font-mono-numbers mt-1">
+                  {formatCurrency(byMethod.dinheiro)}
+                </div>
+              </div>
+
+              {/* PIX */}
+              <div className="p-3 rounded-2xl border border-slate-200 bg-slate-50/50 flex flex-col justify-between">
+                <div className="flex items-center gap-1.5 text-xs text-slate-600 font-medium">
+                  <QrCode className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>PIX</span>
+                </div>
+                <div className="text-lg font-black text-slate-900 font-mono-numbers mt-1">
+                  {formatCurrency(byMethod.pix)}
+                </div>
+              </div>
+
+              {/* Cartões (Débito + Crédito) */}
+              <div className="p-3 rounded-2xl border border-slate-200 bg-slate-50/50 flex flex-col justify-between">
+                <div className="flex items-center gap-1.5 text-xs text-slate-600 font-medium">
+                  <CreditCard className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Cartões</span>
+                </div>
+                <div className="text-lg font-black text-slate-900 font-mono-numbers mt-1">
+                  {formatCurrency(totalCards)}
+                </div>
+              </div>
+
+              {/* A Prazo */}
+              <div className="p-3 rounded-2xl border border-slate-200 bg-slate-50/50 flex flex-col justify-between">
+                <div className="flex items-center gap-1.5 text-xs text-amber-700 font-medium">
+                  <BookUser className="w-3.5 h-3.5 text-amber-600" />
+                  <span>A Prazo</span>
+                </div>
+                <div className="text-lg font-black text-amber-700 font-mono-numbers mt-1">
+                  {formatCurrency(byMethod.fiado)}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* 3. Ranking dos Produtos Mais Vendidos no Período */}
+          {topSoldProducts.length > 0 && (
+            <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-xs space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                  <Tag className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Produtos Mais Vendidos ({periodLabel})</span>
+                </h3>
+                <span className="text-[11px] text-slate-400 font-medium">Top {topSoldProducts.length}</span>
+              </div>
+
+              <div className="space-y-2">
+                {topSoldProducts.map((p, idx) => (
+                  <div
+                    key={p.name}
+                    className="flex items-center justify-between p-2.5 rounded-2xl bg-slate-50 border border-slate-100 text-xs"
                   >
-                    {idx + 1}º
-                  </span>
-                  <div className="min-w-0">
-                    <span className="font-bold text-slate-900 truncate block">{p.name}</span>
-                    <span className="text-[11px] text-slate-500">
-                      {p.quantity} {p.quantity === 1 ? 'vendido' : 'vendidos'}
+                    <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                      <span
+                        className={`w-6 h-6 rounded-lg flex items-center justify-center font-black text-[11px] shrink-0 ${
+                          idx === 0
+                            ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                            : idx === 1
+                            ? 'bg-slate-200 text-slate-700'
+                            : 'bg-slate-100 text-slate-500'
+                        }`}
+                      >
+                        {idx + 1}º
+                      </span>
+                      <div className="min-w-0">
+                        <span className="font-bold text-slate-900 truncate block">{p.name}</span>
+                        <span className="text-[11px] text-slate-500">
+                          {p.quantity} {p.quantity === 1 ? 'vendido' : 'vendidos'}
+                        </span>
+                      </div>
+                    </div>
+                    <span className="font-extrabold text-emerald-700 font-mono-numbers shrink-0">
+                      {formatCurrency(p.revenue)}
                     </span>
                   </div>
-                </div>
-                <span className="font-extrabold text-emerald-700 font-mono-numbers shrink-0">
-                  {formatCurrency(p.revenue)}
-                </span>
+                ))}
               </div>
-            ))}
+            </div>
+          )}
+
+          {/* 4. Lista Rápida de Transações no Período */}
+          <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-xs space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                Transações no Período ({filteredSales.length + filteredExpenses.length})
+              </h3>
+              <button
+                type="button"
+                onClick={() => setViewSubTab('lancamentos')}
+                className="text-[11px] text-emerald-700 hover:text-emerald-800 font-bold underline"
+              >
+                Gerenciar lançamentos
+              </button>
+            </div>
+
+            {allTransactions.length === 0 ? (
+              <p className="text-xs text-slate-400 py-4 text-center">Nenhuma transação encontrada no período selecionado.</p>
+            ) : (
+              <div className="divide-y divide-slate-100 max-h-80 overflow-y-auto overscroll-contain">
+                {allTransactions.slice(0, 15).map((tx) => (
+                  <div
+                    key={tx.id}
+                    onClick={() => {
+                      if (tx.type === 'venda') setEditingSale(tx.sale);
+                      else setEditingExpense(tx.expense);
+                    }}
+                    className="py-2.5 flex items-center justify-between text-xs hover:bg-slate-50/80 cursor-pointer rounded-xl px-2 -mx-2 transition-colors group"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                      <div
+                        className={`w-7 h-7 rounded-xl flex items-center justify-center shrink-0 ${
+                          tx.type === 'venda'
+                            ? 'bg-emerald-50 text-emerald-700'
+                            : 'bg-rose-50 text-rose-600'
+                        }`}
+                      >
+                        {tx.type === 'venda' ? (
+                          <ArrowUpRight className="w-4 h-4" />
+                        ) : (
+                          <ArrowDownRight className="w-4 h-4" />
+                        )}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5 truncate">
+                          {tx.code && (
+                            <span className="text-[10px] font-mono font-bold text-slate-500 bg-slate-100 px-1 rounded shrink-0">
+                              {tx.code}
+                            </span>
+                          )}
+                          <span className="font-bold text-slate-900 truncate">
+                            {tx.title}
+                          </span>
+                        </div>
+                        <div className="text-[11px] text-slate-400 truncate">
+                          {tx.subtitle} · {tx.paymentMethod}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span
+                        className={`font-black font-mono-numbers ${
+                          tx.type === 'venda' ? 'text-emerald-700' : 'text-rose-600'
+                        }`}
+                      >
+                        {tx.type === 'venda' ? '+' : '-'}
+                        {formatCurrency(tx.amount)}
+                      </span>
+                      <span className="text-[11px] font-semibold text-slate-400 group-hover:text-emerald-700 flex items-center gap-0.5">
+                        <Edit className="w-3.5 h-3.5" />
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
+        </>
+      ) : (
+        /* ABA DEDICADA DE LANÇAMENTOS (EDITAR / EXCLUIR) */
+        <div className="space-y-4">
+          {/* Controls: Search & Type Filter */}
+          <div className="bg-white border border-slate-200 rounded-3xl p-4 shadow-xs space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-1.5">
+                  <SlidersHorizontal className="w-4 h-4 text-emerald-600" />
+                  <span>Todos os Lançamentos</span>
+                </h3>
+                <p className="text-[11px] text-slate-500">
+                  Visualize, edite ou exclua qualquer venda ou despesa registrada.
+                </p>
+              </div>
+              <span className="text-xs font-bold text-slate-600 bg-slate-100 px-2.5 py-1 rounded-xl">
+                {visibleTransactions.length} de {allTransactions.length}
+              </span>
+            </div>
+
+            {/* Search Bar */}
+            <div className="relative">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder="Buscar por item, código (#1001), cliente ou forma..."
+                value={lancamentoSearch}
+                onChange={(e) => setLancamentoSearch(e.target.value)}
+                className="w-full pl-9 pr-8 py-2 text-xs font-medium rounded-xl border border-slate-200 bg-slate-50 text-slate-800 placeholder-slate-400 focus:outline-none focus:border-emerald-500 focus:bg-white transition-all"
+              />
+              {lancamentoSearch && (
+                <button
+                  type="button"
+                  onClick={() => setLancamentoSearch('')}
+                  className="text-slate-400 hover:text-slate-600 absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-xs"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+
+            {/* Type selector: Todos, Vendas, Despesas */}
+            <div className="grid grid-cols-3 gap-1.5 p-1 bg-slate-100 rounded-xl">
+              <button
+                type="button"
+                onClick={() => setLancamentoFilterType('todos')}
+                className={`py-1.5 text-xs font-bold rounded-lg transition-all ${
+                  lancamentoFilterType === 'todos'
+                    ? 'bg-white text-slate-900 shadow-xs'
+                    : 'text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                Todos ({allTransactions.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setLancamentoFilterType('vendas')}
+                className={`py-1.5 text-xs font-bold rounded-lg transition-all ${
+                  lancamentoFilterType === 'vendas'
+                    ? 'bg-emerald-600 text-white shadow-xs'
+                    : 'text-slate-500 hover:text-emerald-700'
+                }`}
+              >
+                Vendas ({filteredSales.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setLancamentoFilterType('despesas')}
+                className={`py-1.5 text-xs font-bold rounded-lg transition-all ${
+                  lancamentoFilterType === 'despesas'
+                    ? 'bg-rose-600 text-white shadow-xs'
+                    : 'text-slate-500 hover:text-rose-700'
+                }`}
+              >
+                Despesas ({filteredExpenses.length})
+              </button>
+            </div>
+          </div>
+
+          {/* Transactions Cards List */}
+          {visibleTransactions.length === 0 ? (
+            <div className="bg-white border border-slate-200 rounded-3xl p-8 text-center space-y-2">
+              <div className="w-12 h-12 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center mx-auto">
+                <SlidersHorizontal className="w-6 h-6" />
+              </div>
+              <h4 className="text-sm font-bold text-slate-800">Nenhum lançamento encontrado</h4>
+              <p className="text-xs text-slate-500 max-w-xs mx-auto">
+                {lancamentoSearch
+                  ? 'Nenhum registro coincide com sua busca. Tente buscar por outro termo.'
+                  : 'Nenhuma venda ou despesa registrada para o período selecionado.'}
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-2.5">
+              {visibleTransactions.map((tx) => (
+                <div
+                  key={tx.id}
+                  className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs space-y-3 hover:border-slate-300 transition-all"
+                >
+                  {/* Card Header: Type Badge, Code/Date, Amount */}
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-lg flex items-center gap-1 ${
+                          tx.type === 'venda'
+                            ? 'bg-emerald-100 text-emerald-800'
+                            : 'bg-rose-100 text-rose-800'
+                        }`}
+                      >
+                        {tx.type === 'venda' ? (
+                          <>
+                            <ArrowUpRight className="w-3 h-3 text-emerald-600" />
+                            <span>Venda {tx.code ? `#${tx.code}` : ''}</span>
+                          </>
+                        ) : (
+                          <>
+                            <ArrowDownRight className="w-3 h-3 text-rose-600" />
+                            <span>Despesa</span>
+                          </>
+                        )}
+                      </span>
+
+                      <span className="text-[11px] text-slate-400 font-medium flex items-center gap-1">
+                        <Calendar className="w-3 h-3" />
+                        <span>
+                          {formatDateOnlyBR(tx.date.split('T')[0])} às {formatTimeOnlyBR(tx.date)}
+                        </span>
+                      </span>
+                    </div>
+
+                    <div
+                      className={`text-base font-black font-mono-numbers shrink-0 ${
+                        tx.type === 'venda' ? 'text-emerald-700' : 'text-rose-600'
+                      }`}
+                    >
+                      {tx.type === 'venda' ? '+' : '-'}
+                      {formatCurrency(tx.amount)}
+                    </div>
+                  </div>
+
+                  {/* Description / Items */}
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-900 leading-snug">
+                      {tx.title}
+                    </h4>
+                    <div className="flex flex-wrap items-center gap-1.5 mt-1.5 text-[11px]">
+                      <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 font-medium">
+                        Forma: {tx.paymentMethod}
+                      </span>
+                      {tx.customerName && (
+                        <span className="px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 font-medium">
+                          Cliente: {tx.customerName}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Action Buttons: Editar & Excluir */}
+                  <div className="pt-2.5 border-t border-slate-100 flex items-center justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const confirmMsg =
+                          tx.type === 'venda'
+                            ? 'Tem certeza que deseja excluir esta venda? Se houver produtos de catálogo, as quantidades voltarão ao estoque.'
+                            : 'Tem certeza que deseja excluir esta despesa?';
+                        if (window.confirm(confirmMsg)) {
+                          if (tx.type === 'venda' && onDeleteSale) {
+                            onDeleteSale(tx.sale.id);
+                          } else if (tx.type === 'despesa' && onDeleteExpense) {
+                            onDeleteExpense(tx.expense.id);
+                          }
+                        }
+                      }}
+                      className="px-3 py-1.5 rounded-xl text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 flex items-center gap-1.5 transition-colors"
+                    >
+                      <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                      <span>Excluir</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (tx.type === 'venda') {
+                          setEditingSale(tx.sale);
+                        } else {
+                          setEditingExpense(tx.expense);
+                        }
+                      }}
+                      className="px-3.5 py-1.5 rounded-xl text-xs font-bold text-white bg-slate-900 hover:bg-slate-800 flex items-center gap-1.5 transition-colors shadow-xs"
+                    >
+                      <Edit className="w-3.5 h-3.5" />
+                      <span>Editar</span>
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
-      {/* 4. Lista de Transações no Período (Vendas e Despesas) */}
-      <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-xs space-y-3">
-        <div className="flex items-center justify-between">
-          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
-            Transações no Período ({filteredSales.length + filteredExpenses.length})
-          </h3>
-          <span className="text-[11px] text-slate-400 font-medium">
-            {filteredSales.length} entradas · {filteredExpenses.length} saídas
-          </span>
-        </div>
+      {/* Edit Sale Modal */}
+      {editingSale && (
+        <EditSaleModal
+          isOpen={!!editingSale}
+          sale={editingSale}
+          onClose={() => setEditingSale(null)}
+          onSave={(updated) => {
+            if (onUpdateSale) onUpdateSale(updated);
+            setEditingSale(null);
+          }}
+          onDelete={(id) => {
+            if (onDeleteSale) onDeleteSale(id);
+            setEditingSale(null);
+          }}
+        />
+      )}
 
-        {filteredSales.length === 0 && filteredExpenses.length === 0 ? (
-          <p className="text-xs text-slate-400 py-4 text-center">Nenhuma transação encontrada no período selecionado.</p>
-        ) : (
-          <div className="divide-y divide-slate-100 max-h-80 overflow-y-auto overscroll-contain">
-            {/* Merged and sorted transactions */}
-            {[
-              ...filteredSales.map((s) => {
-                const itemsSummary = s.items.map((i) => `${i.quantity}x ${i.name}`).join(', ');
-                return {
-                  id: s.id,
-                  type: 'venda' as const,
-                  productName: itemsSummary || 'Venda Balcão',
-                  code: s.code,
-                  subtitle: `${formatDateOnlyBR(s.date.split('T')[0])} ${formatTimeOnlyBR(s.date)} · ${
-                    s.paymentMethod === 'fiado' ? 'A Prazo' : s.paymentMethod.replace('_', ' ')
-                  }${s.customerName ? ` · ${s.customerName}` : ''}`,
-                  amount: s.totalAmount,
-                  date: s.date,
-                };
-              }),
-              ...filteredExpenses.map((e) => ({
-                id: e.id,
-                type: 'despesa' as const,
-                productName: e.description || 'Despesa',
-                code: '',
-                subtitle: `${formatDateOnlyBR(e.date.split('T')[0])} ${formatTimeOnlyBR(e.date)} · ${e.category} (${e.paymentMethod})`,
-                amount: e.amount,
-                date: e.date,
-              })),
-            ]
-              .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-              .map((tx) => (
-                <div key={tx.id} className="py-2.5 flex items-center justify-between text-xs">
-                  <div className="flex items-center gap-2.5 min-w-0 pr-2">
-                    <div
-                      className={`w-7 h-7 rounded-xl flex items-center justify-center shrink-0 ${
-                        tx.type === 'venda'
-                          ? 'bg-emerald-50 text-emerald-700'
-                          : 'bg-rose-50 text-rose-600'
-                      }`}
-                    >
-                      {tx.type === 'venda' ? (
-                        <ArrowUpRight className="w-4 h-4" />
-                      ) : (
-                        <ArrowDownRight className="w-4 h-4" />
-                      )}
-                    </div>
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-1.5 truncate">
-                        {tx.code && (
-                          <span className="text-[10px] font-mono font-bold text-slate-500 bg-slate-100 px-1 rounded shrink-0">
-                            {tx.code}
-                          </span>
-                        )}
-                        <span className="font-bold text-slate-900 truncate">
-                          {tx.productName}
-                        </span>
-                      </div>
-                      <div className="text-[11px] text-slate-400 truncate">
-                        {tx.subtitle}
-                      </div>
-                    </div>
-                  </div>
-                  <span
-                    className={`font-black font-mono-numbers shrink-0 ${
-                      tx.type === 'venda' ? 'text-emerald-700' : 'text-rose-600'
-                    }`}
-                  >
-                    {tx.type === 'venda' ? '+' : '-'}
-                    {formatCurrency(tx.amount)}
-                  </span>
-                </div>
-              ))}
-          </div>
-        )}
-      </div>
+      {/* Edit Expense Modal */}
+      {editingExpense && (
+        <EditExpenseModal
+          isOpen={!!editingExpense}
+          expense={editingExpense}
+          onClose={() => setEditingExpense(null)}
+          onSave={(updated) => {
+            if (onUpdateExpense) onUpdateExpense(updated);
+            setEditingExpense(null);
+          }}
+          onDelete={(id) => {
+            if (onDeleteExpense) onDeleteExpense(id);
+            setEditingExpense(null);
+          }}
+        />
+      )}
     </div>
   );
 };

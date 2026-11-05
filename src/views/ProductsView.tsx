@@ -73,8 +73,6 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
   const [dailyGoalStr, setDailyGoalStr] = useState(settings.dailyGoal.toString());
   const [settingsSaved, setSettingsSaved] = useState(false);
 
-  const trialInfo = user ? getTrialInfo(user) : null;
-
   const openEditModal = (p: Product) => {
     setEditingProduct(p);
     setName(p.name);
@@ -175,7 +173,7 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
               : 'text-slate-500 hover:text-slate-900'
           }`}
         >
-          Conta, Plano &amp; Ajustes
+          Configurações
         </button>
       </div>
 
@@ -291,13 +289,13 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
       ) : (
         /* Settings Sub-Tab */
         <div className="space-y-4">
-          {/* User Account & 7-Day Trial Status Card */}
-          {user && trialInfo && (
-            <div className="bg-white border border-slate-200 rounded-3xl p-5 space-y-3.5 shadow-xs">
+          {/* User Account Card */}
+          {user && (
+            <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-xs">
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="w-9 h-9 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 flex items-center justify-center">
-                    <User className="w-4 h-4" />
+                <div className="flex items-center gap-2.5">
+                  <div className="w-10 h-10 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-700 flex items-center justify-center">
+                    <User className="w-5 h-5" />
                   </div>
                   <div>
                     <h3 className="text-sm font-bold text-slate-900">{user.name}</h3>
@@ -308,51 +306,11 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
                 <button
                   type="button"
                   onClick={onLogout}
-                  className="px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-rose-600 font-medium text-xs flex items-center gap-1 border border-slate-200 transition-colors"
+                  className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-600 font-bold text-xs flex items-center gap-1.5 border border-slate-200 hover:border-rose-200 transition-colors"
                 >
                   <LogOut className="w-3.5 h-3.5" />
                   <span>Sair</span>
                 </button>
-              </div>
-
-              {/* Subscription Status Details */}
-              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-2">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-slate-500">Status do Seu Plano:</span>
-                  <span
-                    className={`font-bold font-mono-numbers ${
-                      user.subscriptionStatus === 'active'
-                        ? 'text-emerald-700'
-                        : trialInfo.isExpired
-                        ? 'text-rose-600'
-                        : 'text-amber-700'
-                    }`}
-                  >
-                    {user.subscriptionStatus === 'active'
-                      ? 'Assinatura Ativa (R$ 15,97)'
-                      : trialInfo.isExpired
-                      ? 'Período Gratuito Expirado'
-                      : `Teste Grátis (${trialInfo.daysRemaining} dias restantes)`}
-                  </span>
-                </div>
-
-                <div className="flex items-center justify-between text-xs text-slate-500 pt-1 border-t border-slate-200">
-                  <span>Mensalidade:</span>
-                  <span className="font-mono-numbers text-slate-900 font-semibold">
-                    R$ 15,97 / mês
-                  </span>
-                </div>
-
-                {user.subscriptionStatus !== 'active' && (
-                  <button
-                    type="button"
-                    onClick={onOpenSubscriptionModal}
-                    className="w-full mt-2 min-h-[42px] rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs flex items-center justify-center gap-1.5 shadow-xs touch-press transition-colors"
-                  >
-                    <CreditCard className="w-3.5 h-3.5 stroke-[2.5]" />
-                    <span>ATIVAR ASSINATURA (R$ 15,97/MÊS)</span>
-                  </button>
-                )}
               </div>
             </div>
           )}

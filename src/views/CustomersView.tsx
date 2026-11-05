@@ -712,8 +712,8 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
 
       {/* 5. Modal / Drawer para Cadastrar ou Editar Cliente */}
       {isNewCustomerOpen && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-150">
-          <div className="w-full max-w-md bg-white rounded-t-3xl sm:rounded-3xl border border-slate-200 shadow-2xl flex flex-col max-h-[90vh] overflow-hidden">
+        <div className="fixed inset-0 z-[70] bg-black/60 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-150">
+          <div className="w-full max-w-md bg-white rounded-t-3xl sm:rounded-3xl border border-slate-200 shadow-2xl flex flex-col h-auto max-h-[82vh] sm:max-h-[85vh] overflow-hidden">
             {/* Header */}
             <div className="shrink-0 flex items-center justify-between px-5 pt-4 pb-3 border-b border-slate-100 bg-white">
               <div className="flex items-center gap-2">
@@ -731,135 +731,138 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
               </button>
             </div>
 
-            {/* Scrollable Form Body */}
-            <form id="customer-form" onSubmit={handleSaveCustomerForm} className="flex-1 overflow-y-auto p-5 space-y-3.5 overscroll-contain">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Nome do Cliente *
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Ex: Dona Maria do Pastel"
-                  value={formName}
-                  onChange={(e) => setFormName(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white text-slate-900 text-xs focus:outline-none focus:border-emerald-500 font-medium"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  WhatsApp / Celular com DDD
-                </label>
-                <input
-                  type="tel"
-                  placeholder="Ex: 11999998888"
-                  value={formPhone}
-                  onChange={(e) => setFormPhone(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white text-slate-900 text-xs focus:outline-none focus:border-emerald-500 font-medium"
-                />
-                <p className="text-[10px] text-slate-500 mt-1">
-                  Usado para enviar mensagens no WhatsApp com 1 toque.
-                </p>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Ponto de Venda / Endereço (Opcional)
-                </label>
-                <input
-                  type="text"
-                  placeholder="Ex: Barraca 14 na Feira / Rua 5"
-                  value={formSpot}
-                  onChange={(e) => setFormSpot(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white text-slate-900 text-xs focus:outline-none focus:border-emerald-500 font-medium"
-                />
-              </div>
-
-              {!editingCustomer && (
-                <div className="bg-amber-50/60 border border-amber-200/80 rounded-2xl p-3.5 space-y-2.5">
-                  <div className="flex items-center gap-1.5 text-xs font-bold text-amber-900">
-                    <BookUser className="w-4 h-4 text-amber-700" />
-                    <span>Já tem valor a prazo a anotar? (Opcional)</span>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="block text-[11px] font-semibold text-amber-800 mb-1">
-                        Valor (R$)
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="R$ 0,00"
-                        value={formInitialDebt}
-                        onChange={(e) => setFormInitialDebt(e.target.value)}
-                        className="w-full px-3 py-2 rounded-xl border border-amber-300 bg-white text-amber-900 text-xs font-bold font-mono-numbers focus:outline-none focus:border-amber-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[11px] font-semibold text-amber-800 mb-1">
-                        Data para pagar
-                      </label>
-                      <input
-                        type="date"
-                        value={formDueDate}
-                        onChange={(e) => setFormDueDate(e.target.value)}
-                        className="w-full px-3 py-2 rounded-xl border border-amber-300 bg-white text-slate-800 text-xs focus:outline-none focus:border-amber-500"
-                      />
-                    </div>
-                  </div>
+            {/* Form wrapping body and footer */}
+            <form onSubmit={handleSaveCustomerForm} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+              {/* Scrollable Form Body */}
+              <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-3.5 overscroll-contain">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Nome do Cliente *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Ex: Dona Maria do Pastel"
+                    value={formName}
+                    onChange={(e) => setFormName(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white text-slate-900 text-xs focus:outline-none focus:border-emerald-500 font-medium"
+                    autoFocus
+                  />
                 </div>
-              )}
 
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Observações (Opcional)
-                </label>
-                <textarea
-                  rows={2}
-                  placeholder="Ex: Paga sempre nas sextas-feiras..."
-                  value={formNotes}
-                  onChange={(e) => setFormNotes(e.target.value)}
-                  className="w-full px-3.5 py-2 rounded-xl border border-slate-300 bg-white text-slate-900 text-xs focus:outline-none focus:border-emerald-500 resize-none font-medium"
-                />
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    WhatsApp / Celular com DDD (Opcional)
+                  </label>
+                  <input
+                    type="tel"
+                    placeholder="Ex: 11999998888"
+                    value={formPhone}
+                    onChange={(e) => setFormPhone(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white text-slate-900 text-xs focus:outline-none focus:border-emerald-500 font-medium"
+                  />
+                  <p className="text-[10px] text-slate-500 mt-1">
+                    Usado para enviar mensagens no WhatsApp com 1 toque.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Ponto de Venda / Endereço (Opcional)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Ex: Barraca 14 na Feira / Rua 5"
+                    value={formSpot}
+                    onChange={(e) => setFormSpot(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white text-slate-900 text-xs focus:outline-none focus:border-emerald-500 font-medium"
+                  />
+                </div>
+
+                {!editingCustomer && (
+                  <div className="bg-amber-50/60 border border-amber-200/80 rounded-2xl p-3.5 space-y-2.5">
+                    <div className="flex items-center gap-1.5 text-xs font-bold text-amber-900">
+                      <BookUser className="w-4 h-4 text-amber-700" />
+                      <span>Já tem valor a prazo a anotar? (Opcional)</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-[11px] font-semibold text-amber-800 mb-1">
+                          Valor (R$)
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="R$ 0,00"
+                          value={formInitialDebt}
+                          onChange={(e) => setFormInitialDebt(e.target.value)}
+                          className="w-full px-3 py-2 rounded-xl border border-amber-300 bg-white text-amber-900 text-xs font-bold font-mono-numbers focus:outline-none focus:border-amber-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-semibold text-amber-800 mb-1">
+                          Data para pagar
+                        </label>
+                        <input
+                          type="date"
+                          value={formDueDate}
+                          onChange={(e) => setFormDueDate(e.target.value)}
+                          className="w-full px-3 py-2 rounded-xl border border-amber-300 bg-white text-slate-800 text-xs focus:outline-none focus:border-amber-500"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Observações (Opcional)
+                  </label>
+                  <textarea
+                    rows={2}
+                    placeholder="Ex: Paga sempre nas sextas-feiras..."
+                    value={formNotes}
+                    onChange={(e) => setFormNotes(e.target.value)}
+                    className="w-full px-3.5 py-2 rounded-xl border border-slate-300 bg-white text-slate-900 text-xs focus:outline-none focus:border-emerald-500 resize-none font-medium"
+                  />
+                </div>
+              </div>
+
+              {/* Action Footer - Fixed at bottom of modal with ample padding */}
+              <div className="shrink-0 bg-white border-t border-slate-100 px-4 pt-3 pb-6 sm:pb-4 flex items-center justify-between gap-2.5 z-20">
+                {editingCustomer && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (confirm(`Excluir ${editingCustomer.name}?`)) {
+                        onDeleteCustomer(editingCustomer.id);
+                        setIsNewCustomerOpen(false);
+                      }
+                    }}
+                    className="p-2.5 rounded-xl text-rose-600 hover:bg-rose-50 border border-rose-200 text-xs font-bold flex items-center gap-1 shrink-0"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    <span>Excluir</span>
+                  </button>
+                )}
+
+                <div className="flex-1 flex gap-2 justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setIsNewCustomerOpen(false)}
+                    className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-100 text-xs font-bold"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    className="flex-1 max-w-[200px] min-h-[46px] py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-xs font-extrabold shadow-md transition-all flex items-center justify-center gap-1.5 cursor-pointer touch-press"
+                  >
+                    <Users className="w-4 h-4" />
+                    <span>Salvar Cliente</span>
+                  </button>
+                </div>
               </div>
             </form>
-
-            {/* Sticky Action Footer - Always visible and accessible */}
-            <div className="shrink-0 bg-white border-t border-slate-100 p-4 flex items-center justify-between gap-2.5 z-20 pb-safe">
-              {editingCustomer && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (confirm(`Excluir ${editingCustomer.name}?`)) {
-                      onDeleteCustomer(editingCustomer.id);
-                      setIsNewCustomerOpen(false);
-                    }
-                  }}
-                  className="p-2.5 rounded-xl text-rose-600 hover:bg-rose-50 border border-rose-200 text-xs font-bold flex items-center gap-1 shrink-0"
-                >
-                  <Trash2 className="w-4 h-4" />
-                  <span>Excluir</span>
-                </button>
-              )}
-
-              <div className="flex-1 flex gap-2 justify-end">
-                <button
-                  type="button"
-                  onClick={() => setIsNewCustomerOpen(false)}
-                  className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-100 text-xs font-bold"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  form="customer-form"
-                  className="flex-1 max-w-[200px] py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold shadow-sm transition-colors flex items-center justify-center gap-1.5"
-                >
-                  <Users className="w-4 h-4" />
-                  <span>Salvar Cliente</span>
-                </button>
-              </div>
-            </div>
           </div>
         </div>
       )}

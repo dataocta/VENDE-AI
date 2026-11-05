@@ -9,7 +9,6 @@ import { ExpenseModal } from './components/ExpenseModal';
 import { DebtPaymentModal } from './components/DebtPaymentModal';
 import { CloseRegisterModal } from './components/CloseRegisterModal';
 import { SubscriptionModal } from './components/SubscriptionModal';
-import { TrialBanner } from './components/TrialBanner';
 import { PosView } from './views/PosView';
 import { ExpensesView } from './views/ExpensesView';
 import { CashView } from './views/CashView';
@@ -22,9 +21,12 @@ import {
   deleteProduct,
   getSales,
   saveSale,
+  updateSale,
+  deleteSale,
   cancelSale,
   getExpenses,
   saveExpense,
+  updateExpense,
   deleteExpense,
   getDebts,
   saveCustomerDebt,
@@ -50,6 +52,7 @@ import {
   saveProductFirestore,
   deleteProductFirestore,
   saveSaleFirestore,
+  deleteSaleFirestore,
   saveExpenseFirestore,
   deleteExpenseFirestore,
   saveCustomerFirestore,
@@ -312,6 +315,25 @@ export default function App() {
     }
   };
 
+  const handleUpdateSale = (updated: Sale) => {
+    const uid = currentUser?.id;
+    const next = updateSale(updated, uid);
+    setSales(next);
+    if (uid) {
+      saveSaleFirestore(updated, uid).catch(console.error);
+    }
+  };
+
+  const handleDeleteSale = (saleId: string) => {
+    const uid = currentUser?.id;
+    const next = deleteSale(saleId, uid);
+    setSales(next);
+    setProducts(getProducts(uid));
+    if (uid) {
+      deleteSaleFirestore(saleId).catch(console.error);
+    }
+  };
+
   // Expense handlers
   const handleSaveExpense = (expense: Expense) => {
     const uid = currentUser?.id;
@@ -331,6 +353,15 @@ export default function App() {
 
     // Delete in Firestore
     deleteExpenseFirestore(id).catch(console.error);
+  };
+
+  const handleUpdateExpense = (updated: Expense) => {
+    const uid = currentUser?.id;
+    const next = updateExpense(updated, uid);
+    setExpenses(next);
+    if (uid) {
+      saveExpenseFirestore(updated, uid).catch(console.error);
+    }
   };
 
   // Debt & Customer handlers
@@ -499,13 +530,6 @@ export default function App() {
         settings.highContrastMode ? 'bg-white contrast-125' : 'bg-slate-50'
       }`}
     >
-      {/* 7-Day Free Trial / Subscription Banner */}
-      <TrialBanner
-        user={currentUser}
-        onOpenSubscription={() => setIsSubscriptionOpen(true)}
-        onUserUpdated={(updated) => setCurrentUser({ ...updated })}
-      />
-
       {/* Top Header */}
       <Header
         settings={settings}
@@ -566,6 +590,10 @@ export default function App() {
             dateStr={todayStr}
             onUpdateOpeningBalance={handleUpdateOpeningBalance}
             onOpenCloseRegister={() => setIsCloseRegisterOpen(true)}
+            onUpdateSale={handleUpdateSale}
+            onDeleteSale={handleDeleteSale}
+            onUpdateExpense={handleUpdateExpense}
+            onDeleteExpense={handleDeleteExpense}
           />
         )}
 

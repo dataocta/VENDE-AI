@@ -168,6 +168,45 @@ export function cancelSale(saleId: string, userId?: string): Sale[] {
   return sales;
 }
 
+export function updateSale(sale: Sale, userId?: string): Sale[] {
+  const key = `${getPrefix(userId)}_sales`;
+  const sales = getSales(userId);
+  const idx = sales.findIndex((s) => s.id === sale.id);
+  if (idx >= 0) {
+    sales[idx] = sale;
+    localStorage.setItem(key, JSON.stringify(sales));
+  }
+  return sales;
+}
+
+export function deleteSale(saleId: string, userId?: string): Sale[] {
+  const key = `${getPrefix(userId)}_sales`;
+  const sales = getSales(userId);
+  const target = sales.find((s) => s.id === saleId);
+  if (target) {
+    // Restore stock if it was not cancelled
+    if (target.status !== 'cancelada') {
+      const products = getProducts(userId);
+      let productsChanged = false;
+      target.items.forEach((item) => {
+        if (item.productId) {
+          const prod = products.find((p) => p.id === item.productId);
+          if (prod && typeof prod.stock === 'number') {
+            prod.stock += item.quantity;
+            productsChanged = true;
+          }
+        }
+      });
+      if (productsChanged) {
+        localStorage.setItem(`${getPrefix(userId)}_products`, JSON.stringify(products));
+      }
+    }
+  }
+  const updated = sales.filter((s) => s.id !== saleId);
+  localStorage.setItem(key, JSON.stringify(updated));
+  return updated;
+}
+
 export function getExpenses(userId?: string): Expense[] {
   try {
     const key = `${getPrefix(userId)}_expenses`;
@@ -187,6 +226,17 @@ export function saveExpense(expense: Expense, userId?: string): Expense[] {
   const expenses = getExpenses(userId);
   expenses.unshift(expense);
   localStorage.setItem(key, JSON.stringify(expenses));
+  return expenses;
+}
+
+export function updateExpense(expense: Expense, userId?: string): Expense[] {
+  const key = `${getPrefix(userId)}_expenses`;
+  const expenses = getExpenses(userId);
+  const idx = expenses.findIndex((e) => e.id === expense.id);
+  if (idx >= 0) {
+    expenses[idx] = expense;
+    localStorage.setItem(key, JSON.stringify(expenses));
+  }
   return expenses;
 }
 

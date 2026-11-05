@@ -127,6 +127,15 @@ export async function saveSaleFirestore(sale: Sale, userId: string): Promise<voi
   }
 }
 
+export async function deleteSaleFirestore(saleId: string): Promise<void> {
+  const path = `sales/${saleId}`;
+  try {
+    await deleteDoc(doc(db, 'sales', saleId));
+  } catch (err) {
+    handleFirestoreError(err, OperationType.DELETE, path);
+  }
+}
+
 // -------------------------------------------------------------
 // EXPENSES
 // -------------------------------------------------------------
