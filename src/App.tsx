@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { auth, testFirestoreConnection } from './firebase';
+import { doc, onSnapshot } from 'firebase/firestore';
+import { auth, db, testFirestoreConnection } from './firebase';
+import { Lock, Phone, CreditCard, LogOut } from 'lucide-react';
 import { Header } from './components/Header';
 import { BottomNav, TabType } from './components/BottomNav';
 import { NumpadSaleModal } from './components/NumpadSaleModal';
@@ -9,11 +11,13 @@ import { ExpenseModal } from './components/ExpenseModal';
 import { DebtPaymentModal } from './components/DebtPaymentModal';
 import { CloseRegisterModal } from './components/CloseRegisterModal';
 import { SubscriptionModal } from './components/SubscriptionModal';
+import { AdminPanelModal } from './components/AdminPanelModal';
 import { PosView } from './views/PosView';
 import { ExpensesView } from './views/ExpensesView';
 import { CashView } from './views/CashView';
 import { CustomersView } from './views/CustomersView';
 import { ProductsView } from './views/ProductsView';
+import { AccountSettingsView } from './views/AccountSettingsView';
 import { AuthView } from './views/AuthView';
 import {
   getProducts,
@@ -87,6 +91,7 @@ export default function App() {
   const [payingDebt, setPayingDebt] = useState<CustomerDebt | null>(null);
   const [isCloseRegisterOpen, setIsCloseRegisterOpen] = useState(false);
   const [isSubscriptionOpen, setIsSubscriptionOpen] = useState(false);
+  const [isAdminPanelOpen, setIsAdminPanelOpen] = useState(false);
 
   // Load user and app data on mount + Listen to Firebase Auth
   useEffect(() => {
@@ -129,6 +134,42 @@ export default function App() {
 
     return () => unsubscribe();
   }, []);
+
+  // Real-time synchronization of the current user's status (instant block/unblock)
+  useEffect(() => {
+    if (!currentUser?.id) return;
+    try {
+      const unsub = onSnapshot(
+        doc(db, 'users', currentUser.id),
+        (snap) => {
+          if (snap.exists()) {
+            const data = snap.data();
+            if (
+              data.subscriptionStatus &&
+              (data.subscriptionStatus !== currentUser.subscriptionStatus ||
+                data.trialEndsAt !== currentUser.trialEndsAt)
+            ) {
+              const updated: UserAccount = {
+                ...currentUser,
+                subscriptionStatus: data.subscriptionStatus,
+                trialEndsAt: data.trialEndsAt || currentUser.trialEndsAt,
+                blockedAt: data.blockedAt,
+                subscriptionPaidAt: data.subscriptionPaidAt || currentUser.subscriptionPaidAt,
+              };
+              setCurrentUser(updated);
+              setLocalCurrentUser(updated);
+            }
+          }
+        },
+        (err) => {
+          console.warn('Realtime user listener note:', err);
+        }
+      );
+      return () => unsub();
+    } catch {
+      // Ignore if offline
+    }
+  }, [currentUser?.id]);
 
   const syncDataWithFirestore = async (user: UserAccount) => {
     const uid = user.id;
@@ -511,6 +552,14 @@ export default function App() {
     refreshAllData(currentUser);
   };
 
+  const handleUpdateUserAccount = (partial: Partial<UserAccount>) => {
+    if (!currentUser) return;
+    const updated: UserAccount = { ...currentUser, ...partial };
+    setCurrentUser(updated);
+    setLocalCurrentUser(updated);
+    saveUserProfileFirestore(updated).catch(console.error);
+  };
+
   // If user is not logged in, show AuthView
   if (!currentUser) {
     return <AuthView onAuthSuccess={handleAuthSuccess} />;
@@ -518,6 +567,100 @@ export default function App() {
 
   // Calculate trial info
   const trialInfo = getTrialInfo(currentUser);
+
+  // Check if account is blocked or expired (Super Admin is never locked out)
+  const isSuperAdmin = currentUser.email?.toLowerCase() === 'cosquinha66@gmail.com';
+  const isAccountBlocked =
+    !isSuperAdmin &&
+    (currentUser.subscriptionStatus === 'blocked' ||
+      currentUser.subscriptionStatus === 'expired' ||
+      trialInfo.isExpired);
+
+  if (isAccountBlocked) {
+    return (
+      <div className="min-h-screen bg-slate-100 flex flex-col justify-center items-center px-4 py-8">
+        <div className="w-full max-w-sm bg-white border border-rose-200 rounded-3xl p-6 shadow-xl text-center space-y-4">
+          <div className="w-16 h-16 rounded-3xl bg-rose-100 text-rose-600 flex items-center justify-center mx-auto shadow-inner">
+            <Lock className="w-8 h-8" />
+          </div>
+
+          <div>
+            <span className="text-[11px] font-black uppercase tracking-wider px-2.5 py-1 rounded-full bg-rose-100 text-rose-800 inline-block mb-1">
+              Acesso Bloqueado
+            </span>
+            <h2 className="text-lg font-black text-slate-900 tracking-tight">
+              Acesso ao Vende.ai Suspenso
+            </h2>
+            <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
+              {currentUser.subscriptionStatus === 'blocked'
+                ? 'Seu acesso ao sistema foi suspenso pelo administrador.'
+                : 'Seu período de teste gratuito chegou ao fim.'}{' '}
+              Para liberar seu acesso e continuar vendendo, entre em contato ou assine seu plano.
+            </p>
+          </div>
+
+          {/* User info card */}
+          <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3 text-xs text-left space-y-1">
+            <div className="text-slate-500">
+              Usuário: <strong className="text-slate-800">{currentUser.name}</strong>
+            </div>
+            <div className="text-slate-500 truncate">
+              E-mail: <span className="font-mono text-slate-700">{currentUser.email}</span>
+            </div>
+            <div className="text-slate-500">
+              Status: <span className="text-rose-600 font-bold">Bloqueado</span>
+            </div>
+          </div>
+
+          {/* Action buttons */}
+          <div className="space-y-2 pt-2">
+            <a
+              href={`https://wa.me/55${(settings.phone || '11999999999').replace(/\D/g, '')}?text=${encodeURIComponent(
+                `Olá, gostaria de solicitar a liberação do meu acesso ao Vende.ai (E-mail: ${currentUser.email})`
+              )}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-full min-h-[46px] rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs flex items-center justify-center gap-2 transition-all shadow-xs"
+            >
+              <Phone className="w-4 h-4" />
+              <span>Falar no WhatsApp para Liberar</span>
+            </a>
+
+            <button
+              type="button"
+              onClick={() => setIsSubscriptionOpen(true)}
+              className="w-full min-h-[44px] rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-xs"
+            >
+              <CreditCard className="w-4 h-4 text-emerald-400" />
+              <span>Assinar Plano (R$ 15,97/mês)</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="w-full py-2 text-xs font-bold text-slate-500 hover:text-rose-600 flex items-center justify-center gap-1.5 transition-colors pt-1"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              <span>Sair da Conta (Logout)</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Modal de Assinatura se o usuário quiser assinar diretamente da tela de bloqueio */}
+        <SubscriptionModal
+          isOpen={isSubscriptionOpen}
+          onClose={() => setIsSubscriptionOpen(false)}
+          user={currentUser}
+          onSuccess={(updatedUser: UserAccount) => {
+            setCurrentUser(updatedUser);
+            setLocalCurrentUser(updatedUser);
+            saveUserProfileFirestore(updatedUser).catch(console.error);
+            refreshAllData(updatedUser);
+          }}
+        />
+      </div>
+    );
+  }
 
   // Calculations for header and bottom bar
   const todaySales = sales.filter((s) => s.status === 'concluida' && s.date.startsWith(todayStr));
@@ -538,6 +681,7 @@ export default function App() {
         activeTab={activeTab}
         onOpenQuickSale={() => setIsNumpadOpen(true)}
         onLogout={handleLogout}
+        onOpenAdminPanel={() => setIsAdminPanelOpen(true)}
         todaySalesTotal={todaySalesTotal}
       />
 
@@ -601,15 +745,24 @@ export default function App() {
           <ProductsView
             products={products}
             settings={settings}
-            user={currentUser}
             onSaveProduct={handleSaveProduct}
             onDeleteProduct={handleDeleteProduct}
+          />
+        )}
+
+        {activeTab === 'settings' && (
+          <AccountSettingsView
+            settings={settings}
+            user={currentUser}
+            products={products}
             onUpdateSettings={handleUpdateSettings}
+            onUpdateUserAccount={handleUpdateUserAccount}
             onExportData={handleExportData}
             onImportData={handleImportData}
             onResetData={handleResetData}
-            onOpenSubscriptionModal={() => setIsSubscriptionOpen(true)}
             onLogout={handleLogout}
+            onOpenAdminPanel={() => setIsAdminPanelOpen(true)}
+            onOpenSubscriptionModal={() => setIsSubscriptionOpen(true)}
           />
         )}
       </main>
@@ -678,6 +831,12 @@ export default function App() {
           saveUserProfileFirestore(updatedUser).catch(console.error);
           refreshAllData(updatedUser);
         }}
+      />
+
+      <AdminPanelModal
+        isOpen={isAdminPanelOpen}
+        onClose={() => setIsAdminPanelOpen(false)}
+        currentUserEmail={currentUser?.email}
       />
     </div>
   );

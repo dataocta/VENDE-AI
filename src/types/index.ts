@@ -101,13 +101,14 @@ export interface BusinessSettings {
   pixKeyType: 'cpf' | 'telefone' | 'email' | 'aleatoria';
   phone: string;
   city: string;
-  dailyGoal: number; // Meta diária em R$
+  dailyGoal?: number;
+  categories?: string[];
   soundEnabled: boolean;
   highContrastMode: boolean;
   currency: string;
 }
 
-export type SubscriptionStatus = 'trial' | 'active' | 'expired';
+export type SubscriptionStatus = 'trial' | 'active' | 'expired' | 'blocked';
 
 export interface UserAccount {
   id: string;
@@ -121,5 +122,6 @@ export interface UserAccount {
   subscriptionStatus: SubscriptionStatus;
   subscriptionPaidAt?: string;
   subscriptionExpiresAt?: string;
+  blockedAt?: string;
   planPrice: number; // Default 15.97
 }

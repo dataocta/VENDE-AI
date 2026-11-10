@@ -13,6 +13,7 @@ import { db, auth } from '../firebase';
 import { handleFirestoreError, OperationType } from './firestoreErrors';
 import {
   UserAccount,
+  SubscriptionStatus,
   Product,
   Sale,
   Expense,
@@ -82,6 +83,67 @@ export async function getUserProfileFirestore(uid: string): Promise<UserAccount 
   } catch (err) {
     handleFirestoreError(err, OperationType.GET, path);
     return null;
+  }
+}
+
+export async function getAllUsersFirestore(): Promise<UserAccount[]> {
+  const path = 'users';
+  try {
+    const snap = await getDocs(collection(db, 'users'));
+    const list: UserAccount[] = [];
+    snap.forEach((d) => {
+      const data = d.data();
+      list.push({
+        id: d.id,
+        name: data.name || 'Sem nome',
+        email: data.email || '',
+        phone: data.phone || '',
+        businessName: data.businessName || '',
+        createdAt: data.createdAt || new Date().toISOString(),
+        trialEndsAt: data.trialEndsAt || '',
+        subscriptionStatus: (data.subscriptionStatus as SubscriptionStatus) || 'trial',
+        planPrice: data.planPrice || 15.97,
+      });
+    });
+    return list;
+  } catch (err) {
+    handleFirestoreError(err, OperationType.GET, path);
+    return [];
+  }
+}
+
+export async function updateUserSubscriptionFirestore(
+  userId: string,
+  newStatus: SubscriptionStatus,
+  daysFromNow?: number
+): Promise<void> {
+  const path = `users/${userId}`;
+  try {
+    const updates: Record<string, any> = {
+      subscriptionStatus: newStatus,
+    };
+
+    if (newStatus === 'active') {
+      const now = new Date();
+      updates.subscriptionPaidAt = now.toISOString();
+      const nextMonth = new Date(now.getTime() + (daysFromNow || 30) * 24 * 60 * 60 * 1000);
+      updates.subscriptionExpiresAt = nextMonth.toISOString();
+      updates.blockedAt = null;
+    } else if (newStatus === 'trial') {
+      const now = new Date();
+      const trialEnd = new Date(now.getTime() + (daysFromNow || 7) * 24 * 60 * 60 * 1000);
+      updates.trialEndsAt = trialEnd.toISOString();
+      updates.blockedAt = null;
+    } else if (newStatus === 'blocked' || newStatus === 'expired') {
+      const past = new Date(Date.now() - 1000 * 60 * 60);
+      updates.trialEndsAt = past.toISOString();
+      updates.blockedAt = new Date().toISOString();
+    }
+
+    await setDoc(doc(db, 'users', userId), sanitizeForFirestore(updates), { merge: true });
+  } catch (err) {
+    console.error('Error updating user subscription in Firestore:', err);
+    handleFirestoreError(err, OperationType.WRITE, path);
   }
 }
 

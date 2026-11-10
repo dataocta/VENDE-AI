@@ -222,6 +222,26 @@ export function getTrialInfo(user: UserAccount): {
   isExpired: boolean;
   trialEndsFormatted: string;
 } {
+  if (user.subscriptionStatus === 'blocked') {
+    return {
+      status: 'blocked',
+      daysRemaining: 0,
+      hoursRemaining: 0,
+      isExpired: true,
+      trialEndsFormatted: 'Acesso Bloqueado pelo Administrador',
+    };
+  }
+
+  if (user.subscriptionStatus === 'expired') {
+    return {
+      status: 'expired',
+      daysRemaining: 0,
+      hoursRemaining: 0,
+      isExpired: true,
+      trialEndsFormatted: 'Período Expirado',
+    };
+  }
+
   if (user.subscriptionStatus === 'active') {
     return {
       status: 'active',

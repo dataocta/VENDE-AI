@@ -14,6 +14,8 @@ function getPrefix(customUserId?: string): string {
   return `vendeai_${current}`;
 }
 
+export const DEFAULT_PRODUCT_CATEGORIES = ['Bebidas', 'Lanches', 'Salgados', 'Doces', 'Geral'];
+
 const DEFAULT_SETTINGS: BusinessSettings = {
   businessName: 'Meu Negócio na Rua',
   sellerName: 'Vendedor',
@@ -21,7 +23,7 @@ const DEFAULT_SETTINGS: BusinessSettings = {
   pixKeyType: 'telefone',
   phone: '',
   city: '',
-  dailyGoal: 300,
+  categories: DEFAULT_PRODUCT_CATEGORIES,
   soundEnabled: true,
   highContrastMode: false,
   currency: 'BRL',
@@ -39,11 +41,19 @@ export function getSettings(userId?: string): BusinessSettings {
         sellerName: user?.name || DEFAULT_SETTINGS.sellerName,
         phone: user?.phone || '',
         pixKey: user?.phone || '',
+        categories: DEFAULT_PRODUCT_CATEGORIES,
       };
       localStorage.setItem(key, JSON.stringify(initial));
       return initial;
     }
-    return { ...DEFAULT_SETTINGS, ...JSON.parse(raw) };
+    const parsed = JSON.parse(raw);
+    return {
+      ...DEFAULT_SETTINGS,
+      ...parsed,
+      categories: parsed.categories && Array.isArray(parsed.categories) && parsed.categories.length > 0
+        ? parsed.categories
+        : DEFAULT_PRODUCT_CATEGORIES,
+    };
   } catch {
     return DEFAULT_SETTINGS;
   }

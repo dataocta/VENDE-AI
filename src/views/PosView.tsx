@@ -1,14 +1,10 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
   Zap,
   Trash2,
   Share2,
   TrendingUp,
   Receipt,
-  X,
-  Edit2,
-  Target,
-  CheckCircle2,
   ArrowDownRight,
 } from 'lucide-react';
 import { Product, Sale, BusinessSettings, Customer, Expense } from '../types';
@@ -39,17 +35,12 @@ export const PosView: React.FC<PosViewProps> = ({
   onNavigateToTab,
   onUpdateSettings,
 }) => {
-  // Daily goal inline editing state
-  const [isEditingGoal, setIsEditingGoal] = useState<boolean>(false);
-  const [tempGoalStr, setTempGoalStr] = useState<string>(settings.dailyGoal ? settings.dailyGoal.toString() : '');
-
   // Today's stats calculation
   const todayStr = new Date().toISOString().split('T')[0];
   const todaySales = sales.filter((s) => s.status === 'concluida' && s.date.startsWith(todayStr));
   const todaySalesTotal = todaySales.reduce((acc, s) => acc + s.totalAmount, 0);
   const todayExpenses = expenses.filter((e) => e.date.startsWith(todayStr));
   const todayExpensesTotal = todayExpenses.reduce((acc, e) => acc + e.amount, 0);
-  const goalProgress = settings.dailyGoal > 0 ? Math.min(100, Math.round((todaySalesTotal / settings.dailyGoal) * 100)) : 0;
 
   const handleShareSale = (sale: Sale) => {
     const text = generateWhatsAppSaleReceipt(sale, settings);
@@ -101,124 +92,6 @@ export const PosView: React.FC<PosViewProps> = ({
               {formatCurrency(todayExpensesTotal)}
             </div>
           </div>
-        </div>
-
-        {/* Goal Bar & Inline Edit */}
-        <div className="mt-3 pt-2.5 border-t border-slate-100">
-          {isEditingGoal ? (
-            <div className="space-y-2 bg-slate-50 border border-slate-200 rounded-2xl p-3 animate-in fade-in duration-150">
-              <div className="flex items-center justify-between text-xs font-bold text-slate-700">
-                <span className="flex items-center gap-1.5">
-                  <Target className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>Definir Meta de Vendas Hoje</span>
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setIsEditingGoal(false)}
-                  className="text-slate-400 hover:text-slate-600"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <div className="relative flex-1">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">
-                    R$
-                  </span>
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    placeholder="0,00"
-                    value={tempGoalStr}
-                    onChange={(e) => setTempGoalStr(e.target.value)}
-                    className="w-full pl-9 pr-3 py-2 rounded-xl bg-white border border-slate-300 text-slate-900 text-sm font-bold font-mono-numbers focus:outline-none focus:border-emerald-500 shadow-xs"
-                    autoFocus
-                  />
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    const newGoal = parseFloat(tempGoalStr.replace(',', '.')) || 0;
-                    if (onUpdateSettings) {
-                      onUpdateSettings({ ...settings, dailyGoal: newGoal });
-                    }
-                    setIsEditingGoal(false);
-                  }}
-                  className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs touch-press transition-colors"
-                >
-                  Salvar
-                </button>
-              </div>
-
-              {/* Quick goal presets */}
-              <div className="flex items-center gap-1.5 pt-1 overflow-x-auto no-scrollbar">
-                {[100, 300, 500, 1000, 2000].map((preset) => (
-                  <button
-                    key={preset}
-                    type="button"
-                    onClick={() => setTempGoalStr(preset.toString())}
-                    className="px-2 py-0.5 rounded-lg bg-white border border-slate-200 text-slate-600 text-[11px] font-semibold hover:border-emerald-500 shrink-0 font-mono-numbers"
-                  >
-                    R$ {preset}
-                  </button>
-                ))}
-              </div>
-            </div>
-          ) : (
-            <div>
-              <div className="flex items-center justify-between text-xs mb-1">
-                <span className="text-slate-500 flex items-center gap-1.5">
-                  <Target className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>Meta do Dia:</span>
-                  <strong className="text-slate-900 font-mono-numbers">
-                    {settings.dailyGoal > 0 ? formatCurrency(settings.dailyGoal) : 'Não definida'}
-                  </strong>
-                </span>
-
-                <div className="flex items-center gap-2">
-                  {settings.dailyGoal > 0 && (
-                    <span className="font-bold text-emerald-700 font-mono-numbers">{goalProgress}%</span>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setTempGoalStr(settings.dailyGoal ? settings.dailyGoal.toString() : '');
-                      setIsEditingGoal(true);
-                    }}
-                    className="text-[11px] font-bold text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 px-2 py-0.5 rounded-md flex items-center gap-1 transition-colors"
-                  >
-                    <Edit2 className="w-3 h-3" />
-                    <span>{settings.dailyGoal > 0 ? 'Alterar' : 'Definir Meta'}</span>
-                  </button>
-                </div>
-              </div>
-
-              {settings.dailyGoal > 0 && (
-                <>
-                  <div className="w-full h-2 rounded-full bg-slate-100 overflow-hidden">
-                    <div
-                      className="h-full bg-emerald-600 rounded-full transition-all duration-500"
-                      style={{ width: `${goalProgress}%` }}
-                    />
-                  </div>
-                  <div className="flex items-center justify-between text-[11px] text-slate-400 mt-1">
-                    <span>
-                      {todaySalesTotal >= settings.dailyGoal ? (
-                        <span className="text-emerald-700 font-bold flex items-center gap-1">
-                          <CheckCircle2 className="w-3 h-3" /> Parabéns, meta batida!
-                        </span>
-                      ) : (
-                        <span>Faltam {formatCurrency(Math.max(0, settings.dailyGoal - todaySalesTotal))}</span>
-                      )}
-                    </span>
-                    <span className="font-mono-numbers">{formatCurrency(todaySalesTotal)} vendido</span>
-                  </div>
-                </>
-              )}
-            </div>
-          )}
         </div>
       </div>
 
