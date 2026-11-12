@@ -16,6 +16,16 @@ function getPrefix(customUserId?: string): string {
 
 export const DEFAULT_PRODUCT_CATEGORIES = ['Bebidas', 'Lanches', 'Salgados', 'Doces', 'Geral'];
 
+export const DEFAULT_EXPENSE_CATEGORIES = [
+  'Combustível',
+  'Alimentação / Lanche',
+  'Reposição Estoque',
+  'Sacolas / Embalagem',
+  'Taxa Maquininha',
+  'Manutenção',
+  'Outras Despesas',
+];
+
 const DEFAULT_SETTINGS: BusinessSettings = {
   businessName: 'Meu Negócio na Rua',
   sellerName: 'Vendedor',
@@ -24,6 +34,7 @@ const DEFAULT_SETTINGS: BusinessSettings = {
   phone: '',
   city: '',
   categories: DEFAULT_PRODUCT_CATEGORIES,
+  expenseCategories: DEFAULT_EXPENSE_CATEGORIES,
   soundEnabled: true,
   highContrastMode: false,
   currency: 'BRL',
@@ -42,6 +53,7 @@ export function getSettings(userId?: string): BusinessSettings {
         phone: user?.phone || '',
         pixKey: user?.phone || '',
         categories: DEFAULT_PRODUCT_CATEGORIES,
+        expenseCategories: DEFAULT_EXPENSE_CATEGORIES,
       };
       localStorage.setItem(key, JSON.stringify(initial));
       return initial;
@@ -53,6 +65,9 @@ export function getSettings(userId?: string): BusinessSettings {
       categories: parsed.categories && Array.isArray(parsed.categories) && parsed.categories.length > 0
         ? parsed.categories
         : DEFAULT_PRODUCT_CATEGORIES,
+      expenseCategories: parsed.expenseCategories && Array.isArray(parsed.expenseCategories) && parsed.expenseCategories.length > 0
+        ? parsed.expenseCategories
+        : DEFAULT_EXPENSE_CATEGORIES,
     };
   } catch {
     return DEFAULT_SETTINGS;

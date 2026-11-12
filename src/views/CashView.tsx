@@ -840,6 +840,7 @@ export const CashView: React.FC<CashViewProps> = ({
             if (onDeleteExpense) onDeleteExpense(id);
             setEditingExpense(null);
           }}
+          settings={settings}
         />
       )}
     </div>

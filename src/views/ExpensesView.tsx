@@ -3,20 +3,14 @@ import {
   ArrowDownRight,
   Plus,
   Trash2,
-  Fuel,
-  Utensils,
-  Package,
-  ShoppingBag,
-  Percent,
-  Wrench,
-  MoreHorizontal,
   Calendar,
   Filter,
   Search,
-  X,
 } from 'lucide-react';
-import { Expense, ExpenseCategory } from '../types';
+import { Expense, BusinessSettings } from '../types';
 import { formatCurrency, formatDateBR, formatDateOnlyBR } from '../utils/receipt';
+import { DEFAULT_EXPENSE_CATEGORIES } from '../utils/storage';
+import { getExpenseCategoryIcon, normalizeExpenseCategoryName } from '../utils/expenseCategories';
 
 type DateFilterOption = 'hoje' | 'ontem' | '7dias' | 'mes' | 'todos' | 'custom';
 
@@ -25,6 +19,7 @@ interface ExpensesViewProps {
   todaySalesTotal: number;
   onOpenNewExpense: () => void;
   onDeleteExpense: (id: string) => void;
+  settings?: BusinessSettings;
 }
 
 export const ExpensesView: React.FC<ExpensesViewProps> = ({
@@ -32,11 +27,19 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
   todaySalesTotal,
   onOpenNewExpense,
   onDeleteExpense,
+  settings,
 }) => {
   const [filterPeriod, setFilterPeriod] = useState<DateFilterOption>('hoje');
   const [customDate, setCustomDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [filterCategory, setFilterCategory] = useState<string>('todos');
   const [searchTerm, setSearchTerm] = useState<string>('');
+  const [deletingExpenseId, setDeletingExpenseId] = useState<string | null>(null);
+
+  const activeCategories = useMemo(() => {
+    return settings?.expenseCategories && settings.expenseCategories.length > 0
+      ? settings.expenseCategories
+      : DEFAULT_EXPENSE_CATEGORIES;
+  }, [settings?.expenseCategories]);
 
   const todayStr = new Date().toISOString().split('T')[0];
 
@@ -99,11 +102,13 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
   // 2. Filter by category and search
   const filteredExpenses = useMemo(() => {
     return periodExpenses.filter((e) => {
-      const matchCat = filterCategory === 'todos' || e.category === filterCategory;
+      const normCat = normalizeExpenseCategoryName(e.category);
+      const matchCat = filterCategory === 'todos' || normCat === filterCategory || e.category === filterCategory;
       const term = searchTerm.toLowerCase().trim();
       const matchSearch =
         !term ||
         e.description.toLowerCase().includes(term) ||
+        normCat.toLowerCase().includes(term) ||
         e.category.toLowerCase().includes(term);
       return matchCat && matchSearch;
     });
@@ -111,31 +116,12 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
 
   const totalFilteredAmount = filteredExpenses.reduce((acc, e) => acc + e.amount, 0);
 
-  const categoryIcons: Record<ExpenseCategory, React.FC<{ className?: string }>> = {
-    combustivel: Fuel,
-    alimentacao: Utensils,
-    estoque: Package,
-    embalagem: ShoppingBag,
-    taxa: Percent,
-    manutencao: Wrench,
-    outros: MoreHorizontal,
-  };
-
-  const categoryLabels: Record<ExpenseCategory, string> = {
-    combustivel: 'Combustível',
-    alimentacao: 'Alimentação',
-    estoque: 'Estoque',
-    embalagem: 'Embalagens',
-    taxa: 'Taxas',
-    manutencao: 'Manutenção',
-    outros: 'Outros',
-  };
-
   // Group by category for distribution
   const categoryTotals = useMemo(() => {
     const totals: Record<string, number> = {};
     filteredExpenses.forEach((e) => {
-      totals[e.category] = (totals[e.category] || 0) + e.amount;
+      const norm = normalizeExpenseCategoryName(e.category);
+      totals[norm] = (totals[norm] || 0) + e.amount;
     });
     return totals;
   }, [filteredExpenses]);
@@ -213,32 +199,39 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
           >
             Todas Categorias
           </button>
-          {Object.entries(categoryLabels).map(([cat, label]) => (
+          {activeCategories.map((catName) => (
             <button
-              key={cat}
+              key={catName}
               type="button"
-              onClick={() => setFilterCategory(cat)}
+              onClick={() => setFilterCategory(catName)}
               className={`px-2.5 py-1 rounded-lg text-xs font-semibold shrink-0 transition-all ${
-                filterCategory === cat
+                filterCategory === catName
                   ? 'bg-rose-600 text-white'
                   : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}
             >
-              {label}
+              {catName}
             </button>
           ))}
         </div>
       </div>
 
-      {/* 1. Main Expense Header Card */}
+      {/* 1. Main Expense Summary Banner */}
       <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-xs space-y-3">
         <div className="flex items-center justify-between">
-          <span className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
-            <ArrowDownRight className="w-3.5 h-3.5 text-rose-600" />
-            <span>Total de Despesas ({periodLabel})</span>
-          </span>
+          <div className="flex items-center gap-2">
+            <div className="w-9 h-9 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center border border-rose-100">
+              <ArrowDownRight className="w-5 h-5" />
+            </div>
+            <div>
+              <span className="text-xs uppercase tracking-wider text-slate-500 font-bold block">
+                Total de Despesas
+              </span>
+              <span className="text-xs text-rose-700 font-medium">{periodLabel}</span>
+            </div>
+          </div>
           <span className="text-xs text-rose-700 bg-rose-50 font-bold px-2 py-0.5 rounded-md">
-            {filteredExpenses.length} despesas
+            {filteredExpenses.length} {filteredExpenses.length === 1 ? 'despesa' : 'despesas'}
           </span>
         </div>
 
@@ -260,14 +253,13 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
             </span>
             <div className="grid grid-cols-2 gap-2 text-xs">
               {Object.entries(categoryTotals).map(([cat, total]) => {
-                const Icon = categoryIcons[cat as ExpenseCategory] || MoreHorizontal;
-                const label = categoryLabels[cat as ExpenseCategory] || cat;
+                const Icon = getExpenseCategoryIcon(cat);
 
                 return (
                   <div key={cat} className="bg-slate-50 border border-slate-100 rounded-xl p-2 flex items-center justify-between">
                     <div className="flex items-center gap-1.5 min-w-0 pr-1">
                       <Icon className="w-3.5 h-3.5 text-rose-600 shrink-0" />
-                      <span className="truncate text-slate-700 font-medium">{label}</span>
+                      <span className="truncate text-slate-700 font-medium">{cat}</span>
                     </div>
                     <span className="font-mono-numbers font-bold text-slate-900 shrink-0">
                       {formatCurrency(total)}
@@ -295,28 +287,19 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
         <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
         <input
           type="text"
-          placeholder="Buscar despesa por descrição..."
+          placeholder="Buscar despesa por descrição ou categoria..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          className="w-full pl-10 pr-4 py-2.5 rounded-2xl bg-white border border-slate-200 text-slate-900 text-xs placeholder:text-slate-400 focus:outline-none focus:border-rose-500 shadow-xs"
+          className="w-full pl-9 pr-3 py-2.5 rounded-2xl bg-white border border-slate-200 text-slate-900 text-xs focus:outline-none focus:border-rose-500 shadow-2xs"
         />
-        {searchTerm && (
-          <button
-            type="button"
-            onClick={() => setSearchTerm('')}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1"
-          >
-            <X className="w-3.5 h-3.5" />
-          </button>
-        )}
       </div>
 
-      {/* 4. Filtered Expenses List */}
-      <div className="space-y-2.5">
+      {/* 4. Expenses List */}
+      <div className="space-y-2">
         <div className="flex items-center justify-between px-1">
-          <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+          <span className="text-xs font-bold text-slate-700">
             Lançamentos ({filteredExpenses.length})
-          </h3>
+          </span>
           <span className="text-xs font-black text-rose-600 font-mono-numbers">
             {formatCurrency(totalFilteredAmount)}
           </span>
@@ -332,51 +315,76 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
           </div>
         ) : (
           filteredExpenses.map((expense) => {
-            const Icon = categoryIcons[expense.category] || MoreHorizontal;
-            const catLabel = categoryLabels[expense.category] || expense.category;
+            const normCat = normalizeExpenseCategoryName(expense.category);
+            const Icon = getExpenseCategoryIcon(normCat);
+            const isDeleting = deletingExpenseId === expense.id;
 
             return (
               <div
                 key={expense.id}
-                className="bg-white border border-slate-200 rounded-2xl p-3.5 shadow-xs flex items-center justify-between gap-3"
+                className="bg-white border border-slate-200 rounded-2xl p-3.5 shadow-xs flex flex-col gap-2"
               >
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-10 h-10 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0 border border-rose-100">
-                    <Icon className="w-5 h-5" />
-                  </div>
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-10 h-10 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0 border border-rose-100">
+                      <Icon className="w-5 h-5" />
+                    </div>
 
-                  <div className="min-w-0">
-                    <h4 className="font-extrabold text-slate-900 text-xs sm:text-sm truncate">
-                      {expense.description || catLabel}
-                    </h4>
-                    <div className="flex items-center gap-2 text-[11px] text-slate-400 mt-0.5">
-                      <span className="font-medium text-slate-600">{catLabel}</span>
-                      <span>·</span>
-                      <span>{formatDateBR(expense.date)}</span>
-                      <span>·</span>
-                      <span className="capitalize">{expense.paymentMethod}</span>
+                    <div className="min-w-0">
+                      <h4 className="font-extrabold text-slate-900 text-xs sm:text-sm truncate">
+                        {expense.description || normCat}
+                      </h4>
+                      <div className="flex items-center gap-2 text-[11px] text-slate-400 mt-0.5">
+                        <span className="font-medium text-slate-600">{normCat}</span>
+                        <span>·</span>
+                        <span>{formatDateBR(expense.date)}</span>
+                        <span>·</span>
+                        <span className="capitalize">{expense.paymentMethod}</span>
+                      </div>
                     </div>
                   </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-sm sm:text-base font-extrabold text-rose-600 font-mono-numbers">
+                      -{formatCurrency(expense.amount)}
+                    </span>
+
+                    <button
+                      type="button"
+                      onClick={() => setDeletingExpenseId(expense.id)}
+                      className="p-1.5 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                      title="Excluir despesa"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
 
-                <div className="flex items-center gap-2 shrink-0">
-                  <span className="text-sm sm:text-base font-extrabold text-rose-600 font-mono-numbers">
-                    -{formatCurrency(expense.amount)}
-                  </span>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (confirm(`Excluir despesa de ${formatCurrency(expense.amount)}?`)) {
-                        onDeleteExpense(expense.id);
-                      }
-                    }}
-                    className="p-1.5 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
-                    title="Excluir despesa"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
+                {/* Inline Safe Delete Confirmation */}
+                {isDeleting && (
+                  <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 flex items-center justify-between gap-2 text-xs text-rose-900">
+                    <span className="truncate">Excluir despesa de {formatCurrency(expense.amount)}?</span>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onDeleteExpense(expense.id);
+                          setDeletingExpenseId(null);
+                        }}
+                        className="px-2.5 py-1 rounded-lg bg-rose-600 text-white font-bold hover:bg-rose-700"
+                      >
+                        Sim
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDeletingExpenseId(null)}
+                        className="px-2.5 py-1 rounded-lg bg-slate-200 text-slate-700 font-bold hover:bg-slate-300"
+                      >
+                        Não
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })

@@ -49,7 +49,8 @@ export type ExpenseCategory =
   | 'embalagem'
   | 'taxa'
   | 'manutencao'
-  | 'outros';
+  | 'outros'
+  | string;
 
 export interface Expense {
   id: string;
@@ -103,6 +104,7 @@ export interface BusinessSettings {
   city: string;
   dailyGoal?: number;
   categories?: string[];
+  expenseCategories?: string[];
   soundEnabled: boolean;
   highContrastMode: boolean;
   currency: string;

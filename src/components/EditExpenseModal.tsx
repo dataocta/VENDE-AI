@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
-import { X, Check, Trash2, Fuel, Utensils, Package, ShoppingBag, Percent, Wrench, MoreHorizontal, Banknote, QrCode, CreditCard, Calendar } from 'lucide-react';
-import { Expense, ExpenseCategory } from '../types';
+import { X, Check, Trash2, Banknote, QrCode, CreditCard, Calendar } from 'lucide-react';
+import { Expense, BusinessSettings } from '../types';
 import { formatCurrency } from '../utils/receipt';
+import { DEFAULT_EXPENSE_CATEGORIES } from '../utils/storage';
+import { getExpenseCategoryIcon, normalizeExpenseCategoryName } from '../utils/expenseCategories';
 
 interface EditExpenseModalProps {
   isOpen: boolean;
@@ -9,6 +11,7 @@ interface EditExpenseModalProps {
   onClose: () => void;
   onSave: (updatedExpense: Expense) => void;
   onDelete: (id: string) => void;
+  settings?: BusinessSettings;
 }
 
 export const EditExpenseModal: React.FC<EditExpenseModalProps> = ({
@@ -17,28 +20,27 @@ export const EditExpenseModal: React.FC<EditExpenseModalProps> = ({
   onClose,
   onSave,
   onDelete,
+  settings,
 }) => {
   if (!isOpen || !expense) return null;
 
+  const activeCategories = settings?.expenseCategories && settings.expenseCategories.length > 0
+    ? settings.expenseCategories
+    : DEFAULT_EXPENSE_CATEGORIES;
+
+  const currentNormalized = normalizeExpenseCategoryName(expense.category);
+
+  // If the expense's category isn't in activeCategories, prepend or append it so user can keep it
+  const allAvailableCategories = activeCategories.includes(currentNormalized)
+    ? activeCategories
+    : [currentNormalized, ...activeCategories];
+
   const [amountStr, setAmountStr] = useState<string>(expense.amount.toFixed(2).replace('.', ','));
-  const [category, setCategory] = useState<ExpenseCategory>(expense.category);
+  const [category, setCategory] = useState<string>(currentNormalized);
   const [description, setDescription] = useState<string>(expense.description);
   const [paymentMethod, setPaymentMethod] = useState<'dinheiro' | 'pix' | 'cartao'>(expense.paymentMethod);
   const [dateStr, setDateStr] = useState<string>(expense.date.split('T')[0]);
-
-  const categories: {
-    id: ExpenseCategory;
-    label: string;
-    icon: React.FC<{ className?: string }>;
-  }[] = [
-    { id: 'combustivel', label: 'Combustível', icon: Fuel },
-    { id: 'alimentacao', label: 'Almoço / Café', icon: Utensils },
-    { id: 'estoque', label: 'Estoque', icon: Package },
-    { id: 'embalagem', label: 'Sacolas', icon: ShoppingBag },
-    { id: 'taxa', label: 'Taxa Maquininha', icon: Percent },
-    { id: 'manutencao', label: 'Manutenção', icon: Wrench },
-    { id: 'outros', label: 'Outras Despesas', icon: MoreHorizontal },
-  ];
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -53,7 +55,7 @@ export const EditExpenseModal: React.FC<EditExpenseModalProps> = ({
       ...expense,
       amount: num,
       category,
-      description: description.trim() || 'Despesa',
+      description: description.trim() || category || 'Despesa',
       paymentMethod,
       date: newDateISO,
     });
@@ -132,17 +134,17 @@ export const EditExpenseModal: React.FC<EditExpenseModalProps> = ({
           {/* Categories Grid */}
           <div>
             <label className="text-xs font-semibold text-slate-600 block mb-1.5">
-              Categoria
+              Categoria da Despesa
             </label>
             <div className="grid grid-cols-2 gap-1.5">
-              {categories.map((c) => {
-                const Icon = c.icon;
-                const isSelected = category === c.id;
+              {allAvailableCategories.map((catName) => {
+                const Icon = getExpenseCategoryIcon(catName);
+                const isSelected = category === catName;
                 return (
                   <button
-                    key={c.id}
+                    key={catName}
                     type="button"
-                    onClick={() => setCategory(c.id)}
+                    onClick={() => setCategory(catName)}
                     className={`p-2 rounded-xl border text-left flex items-center gap-2 text-xs font-semibold transition-all ${
                       isSelected
                         ? 'bg-rose-50 border-rose-400 text-rose-800 shadow-2xs'
@@ -150,7 +152,7 @@ export const EditExpenseModal: React.FC<EditExpenseModalProps> = ({
                     }`}
                   >
                     <Icon className="w-4 h-4 text-rose-600 shrink-0" />
-                    <span className="truncate">{c.label}</span>
+                    <span className="truncate">{catName}</span>
                   </button>
                 );
               })}
@@ -204,21 +206,44 @@ export const EditExpenseModal: React.FC<EditExpenseModalProps> = ({
             </div>
           </div>
 
+          {/* Inline Delete Confirmation */}
+          {confirmDelete && (
+            <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 flex items-center justify-between gap-2 text-xs text-rose-900">
+              <span>Excluir despesa de {formatCurrency(expense.amount)}?</span>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    onDelete(expense.id);
+                    onClose();
+                  }}
+                  className="px-2.5 py-1 rounded-lg bg-rose-600 text-white font-bold hover:bg-rose-700"
+                >
+                  Confirmar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmDelete(false)}
+                  className="px-2.5 py-1 rounded-lg bg-slate-200 text-slate-700 font-bold hover:bg-slate-300"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Action Footer */}
           <div className="pt-2 flex items-center justify-between gap-2 border-t border-slate-100">
-            <button
-              type="button"
-              onClick={() => {
-                if (confirm(`Deseja realmente excluir esta despesa de ${formatCurrency(expense.amount)}?`)) {
-                  onDelete(expense.id);
-                  onClose();
-                }
-              }}
-              className="p-2.5 rounded-xl text-rose-600 hover:bg-rose-50 border border-rose-200 text-xs font-bold flex items-center gap-1 shrink-0"
-            >
-              <Trash2 className="w-4 h-4" />
-              <span>Excluir</span>
-            </button>
+            {!confirmDelete && (
+              <button
+                type="button"
+                onClick={() => setConfirmDelete(true)}
+                className="p-2.5 rounded-xl text-rose-600 hover:bg-rose-50 border border-rose-200 text-xs font-bold flex items-center gap-1 shrink-0"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>Excluir</span>
+              </button>
+            )}
 
             <div className="flex-1 flex gap-2 justify-end">
               <button

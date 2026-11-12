@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
-import { X, Check, Fuel, Utensils, Package, ShoppingBag, Percent, Wrench, MoreHorizontal, Banknote, QrCode, CreditCard } from 'lucide-react';
-import { Expense, ExpenseCategory } from '../types';
-import { formatCurrency } from '../utils/receipt';
+import React, { useState, useEffect } from 'react';
+import { X, Check, Banknote, QrCode, CreditCard } from 'lucide-react';
+import { Expense, BusinessSettings } from '../types';
+import { DEFAULT_EXPENSE_CATEGORIES } from '../utils/storage';
+import { getExpenseCategoryIcon } from '../utils/expenseCategories';
 import { playExpenseSound, playTapBeep } from '../utils/audio';
 
 interface ExpenseModalProps {
@@ -9,6 +10,7 @@ interface ExpenseModalProps {
   onClose: () => void;
   onSaveExpense: (expense: Expense) => void;
   soundEnabled: boolean;
+  settings?: BusinessSettings;
 }
 
 export const ExpenseModal: React.FC<ExpenseModalProps> = ({
@@ -16,34 +18,30 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
   onClose,
   onSaveExpense,
   soundEnabled,
+  settings,
 }) => {
+  const activeCategories = settings?.expenseCategories && settings.expenseCategories.length > 0
+    ? settings.expenseCategories
+    : DEFAULT_EXPENSE_CATEGORIES;
+
   const [amountStr, setAmountStr] = useState<string>('');
-  const [category, setCategory] = useState<ExpenseCategory>('combustivel');
+  const [category, setCategory] = useState<string>(activeCategories[0] || 'Outras Despesas');
   const [description, setDescription] = useState<string>('');
   const [paymentMethod, setPaymentMethod] = useState<'dinheiro' | 'pix' | 'cartao'>('dinheiro');
 
+  useEffect(() => {
+    if (activeCategories.length > 0 && !activeCategories.includes(category)) {
+      setCategory(activeCategories[0]);
+    }
+  }, [activeCategories, category]);
+
   if (!isOpen) return null;
 
-  const categories: {
-    id: ExpenseCategory;
-    label: string;
-    icon: React.FC<{ className?: string }>;
-    defaultDesc: string;
-  }[] = [
-    { id: 'combustivel', label: 'Combustível', icon: Fuel, defaultDesc: 'Gasolina / Passagem na rua' },
-    { id: 'alimentacao', label: 'Almoço / Lanche', icon: Utensils, defaultDesc: 'Almoço / Café na rua' },
-    { id: 'estoque', label: 'Reposição Estoque', icon: Package, defaultDesc: 'Compra de mercadoria / atacado' },
-    { id: 'embalagem', label: 'Sacolas / Embalagem', icon: ShoppingBag, defaultDesc: 'Sacolas e potes' },
-    { id: 'taxa', label: 'Taxa Maquininha', icon: Percent, defaultDesc: 'Taxa / aluguel maquininha' },
-    { id: 'manutencao', label: 'Manutenção', icon: Wrench, defaultDesc: 'Manutenção veículo / carrinho' },
-    { id: 'outros', label: 'Outras Despesas', icon: MoreHorizontal, defaultDesc: 'Despesa avulsa' },
-  ];
-
-  const handleSelectCategory = (cat: ExpenseCategory, defDesc: string) => {
+  const handleSelectCategory = (catName: string) => {
     if (soundEnabled) playTapBeep();
-    setCategory(cat);
-    if (!description || categories.some((c) => c.defaultDesc === description)) {
-      setDescription(defDesc);
+    setCategory(catName);
+    if (!description || activeCategories.includes(description)) {
+      setDescription(catName);
     }
   };
 
@@ -63,7 +61,7 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
       date: new Date().toISOString(),
       amount: num,
       category,
-      description: description.trim() || 'Despesa na rua',
+      description: description.trim() || category || 'Despesa na rua',
       paymentMethod,
     };
 
@@ -138,15 +136,15 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
               Categoria da Despesa
             </label>
             <div className="grid grid-cols-2 gap-2">
-              {categories.map((cat) => {
-                const Icon = cat.icon;
-                const isSelected = category === cat.id;
+              {activeCategories.map((catName) => {
+                const Icon = getExpenseCategoryIcon(catName);
+                const isSelected = category === catName;
 
                 return (
                   <button
-                    key={cat.id}
+                    key={catName}
                     type="button"
-                    onClick={() => handleSelectCategory(cat.id, cat.defaultDesc)}
+                    onClick={() => handleSelectCategory(catName)}
                     className={`min-h-[44px] p-2.5 rounded-xl border text-left flex items-center gap-2.5 transition-all touch-press ${
                       isSelected
                         ? 'bg-rose-50 border-rose-400 text-rose-800 shadow-xs'
@@ -161,7 +159,7 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
                       <Icon className="w-4 h-4" />
                     </div>
                     <span className="text-xs font-semibold truncate leading-tight">
-                      {cat.label}
+                      {catName}
                     </span>
                   </button>
                 );

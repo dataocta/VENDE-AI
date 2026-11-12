@@ -722,6 +722,7 @@ export default function App() {
             todaySalesTotal={todaySalesTotal}
             onOpenNewExpense={() => setIsExpenseOpen(true)}
             onDeleteExpense={handleDeleteExpense}
+            settings={settings}
           />
         )}
 
@@ -755,6 +756,7 @@ export default function App() {
             settings={settings}
             user={currentUser}
             products={products}
+            expenses={expenses}
             onUpdateSettings={handleUpdateSettings}
             onUpdateUserAccount={handleUpdateUserAccount}
             onExportData={handleExportData}
@@ -799,6 +801,7 @@ export default function App() {
         onClose={() => setIsExpenseOpen(false)}
         onSaveExpense={handleSaveExpense}
         soundEnabled={settings.soundEnabled}
+        settings={settings}
       />
 
       <DebtPaymentModal
