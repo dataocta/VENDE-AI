@@ -784,6 +784,7 @@ export default function App() {
         soundEnabled={settings.soundEnabled}
         customers={customers}
         products={products}
+        onSaveCustomer={handleSaveCustomer}
       />
 
       <SaleSuccessModal

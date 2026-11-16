@@ -142,10 +142,21 @@ export const PosView: React.FC<PosViewProps> = ({
                 className="bg-white border border-slate-200 rounded-2xl p-3 flex items-center justify-between gap-3 shadow-xs"
               >
                 <div className="min-w-0">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1.5 flex-wrap">
                     <span className="font-extrabold text-sm text-slate-900 font-mono-numbers">
                       {formatCurrency(s.totalAmount)}
                     </span>
+                    {s.category && s.category !== 'Venda' && (
+                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${
+                        s.entryType === 'estorno' || s.category === 'Estorno'
+                          ? 'bg-purple-100 text-purple-800 border border-purple-200'
+                          : s.entryType === 'servico'
+                          ? 'bg-blue-100 text-blue-800 border border-blue-200'
+                          : 'bg-amber-100 text-amber-800 border border-amber-200'
+                      }`}>
+                        {s.category}
+                      </span>
+                    )}
                     <span className="text-xs text-emerald-700 font-medium bg-emerald-50 px-2 py-0.5 rounded-md">
                       {getPaymentMethodLabel(s.paymentMethod)}
                     </span>

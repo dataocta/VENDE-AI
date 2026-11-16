@@ -65,8 +65,15 @@ export function getPaymentMethodLabel(method: string): string {
 }
 
 export function generateWhatsAppSaleReceipt(sale: Sale, settings: BusinessSettings): string {
+  const receiptTitle =
+    sale.entryType === 'estorno' || sale.category === 'Estorno'
+      ? 'COMPROVANTE DE ESTORNO'
+      : sale.category && sale.category !== 'Venda'
+      ? `COMPROVANTE DE ${sale.category.toUpperCase()}`
+      : 'COMPROVANTE DE VENDA';
+
   const lines: string[] = [
-    `🧾 *COMPROVANTE DE VENDA*`,
+    `🧾 *${receiptTitle}*`,
     `🏪 *${settings.businessName || 'Venda na Rua'}*`,
     `📅 ${formatDateBR(sale.date)}`,
     `🔖 Pedido: ${sale.code}`,

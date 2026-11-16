@@ -91,6 +91,8 @@ export function registerUser(params: {
   phone: string;
   password?: string;
   businessName: string;
+  planPrice?: number;
+  selectedPlan?: 'trial' | 'monthly' | 'annual';
 }): { success: boolean; user?: UserAccount; error?: string } {
   const users = getRegisteredUsers();
   const cleanEmail = params.email.trim().toLowerCase();
@@ -134,7 +136,8 @@ export function registerUser(params: {
     createdAt: now.toISOString(),
     trialEndsAt: sevenDaysLater.toISOString(),
     subscriptionStatus: 'trial',
-    planPrice: 15.97,
+    planPrice: params.planPrice || 15.97,
+    selectedPlan: params.selectedPlan || 'trial',
   };
 
   users.unshift(newUser);

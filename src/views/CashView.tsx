@@ -191,8 +191,11 @@ export const CashView: React.FC<CashViewProps> = ({
         date: s.date,
         amount: s.totalAmount,
         sale: s,
-        title: s.items.map((i) => `${i.quantity}x ${i.name}`).join(', ') || 'Venda Balcão',
-        subtitle: `${formatDateOnlyBR(s.date.split('T')[0])} ${formatTimeOnlyBR(s.date)}${s.customerName ? ` · Cliente: ${s.customerName}` : ''}`,
+        title:
+          s.category && s.category !== 'Venda'
+            ? `${s.category}: ${s.items.map((i) => i.name).join(', ') || 'Entrada'}`
+            : s.items.map((i) => `${i.quantity}x ${i.name}`).join(', ') || 'Venda Balcão',
+        subtitle: `${formatDateOnlyBR(s.date.split('T')[0])} ${formatTimeOnlyBR(s.date)}${s.category && s.category !== 'Venda' ? ` · Categoria: ${s.category}` : ''}${s.customerName ? ` · Cliente: ${s.customerName}` : ''}`,
         code: s.code || '',
         paymentMethod: s.paymentMethod === 'fiado' ? 'A Prazo' : s.paymentMethod.replace('_', ' '),
         customerName: s.customerName,
@@ -719,7 +722,10 @@ export const CashView: React.FC<CashViewProps> = ({
                         {tx.type === 'venda' ? (
                           <>
                             <ArrowUpRight className="w-3 h-3 text-emerald-600" />
-                            <span>Venda {tx.code ? `#${tx.code}` : ''}</span>
+                            <span>
+                              {tx.sale.category && tx.sale.category !== 'Venda' ? tx.sale.category : 'Venda'}{' '}
+                              {tx.code ? `#${tx.code}` : ''}
+                            </span>
                           </>
                         ) : (
                           <>

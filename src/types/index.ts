@@ -40,6 +40,8 @@ export interface Sale {
   customerId?: string;
   notes?: string;
   status: 'concluida' | 'cancelada';
+  entryType?: 'venda' | 'estorno' | 'servico' | 'aporte' | 'outro' | string;
+  category?: string;
 }
 
 export type ExpenseCategory =
@@ -126,4 +128,5 @@ export interface UserAccount {
   subscriptionExpiresAt?: string;
   blockedAt?: string;
   planPrice: number; // Default 15.97
+  selectedPlan?: 'trial' | 'monthly' | 'annual';
 }

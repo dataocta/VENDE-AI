@@ -50,9 +50,13 @@ export const SaleSuccessModal: React.FC<SaleSuccessModalProps> = ({
         {/* Top Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-600" />
-            <span className="text-xs font-bold uppercase tracking-wider text-emerald-700">
-              Venda Concluída!
+            <span className={`w-2.5 h-2.5 rounded-full ${sale.entryType === 'estorno' ? 'bg-purple-600' : 'bg-emerald-600'}`} />
+            <span className={`text-xs font-bold uppercase tracking-wider ${sale.entryType === 'estorno' ? 'text-purple-700' : 'text-emerald-700'}`}>
+              {sale.entryType === 'estorno'
+                ? 'Estorno Concluído!'
+                : sale.category && sale.category !== 'Venda'
+                ? `${sale.category} Concluído!`
+                : 'Venda Concluída!'}
             </span>
           </div>
           <button
