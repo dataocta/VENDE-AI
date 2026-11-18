@@ -85,6 +85,23 @@ export function setCurrentUser(user: UserAccount | null) {
   }
 }
 
+export function upsertLocalUser(user: UserAccount): UserAccount {
+  try {
+    const users = getRegisteredUsers();
+    const idx = users.findIndex((u) => u.id === user.id || (user.email && u.email.toLowerCase() === user.email.toLowerCase()));
+    if (idx >= 0) {
+      users[idx] = { ...users[idx], ...user };
+    } else {
+      users.unshift(user);
+    }
+    saveRegisteredUsers(users);
+    setCurrentUser(user);
+  } catch (err) {
+    console.error('Failed to upsert local user', err);
+  }
+  return user;
+}
+
 export function registerUser(params: {
   name: string;
   email: string;

@@ -129,4 +129,6 @@ export interface UserAccount {
   blockedAt?: string;
   planPrice: number; // Default 15.97
   selectedPlan?: 'trial' | 'monthly' | 'annual';
+  stripeCustomerId?: string;
+  stripeSubscriptionId?: string;
 }

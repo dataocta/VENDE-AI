@@ -49,9 +49,11 @@ import {
 import {
   getCurrentUser,
   setCurrentUser as setLocalCurrentUser,
+  upsertLocalUser,
   logoutUser,
   getTrialInfo,
 } from './utils/authStorage';
+import { playSaleChime } from './utils/audio';
 import {
   saveProductFirestore,
   deleteProductFirestore,
@@ -91,6 +93,7 @@ export default function App() {
   const [payingDebt, setPayingDebt] = useState<CustomerDebt | null>(null);
   const [isCloseRegisterOpen, setIsCloseRegisterOpen] = useState(false);
   const [isSubscriptionOpen, setIsSubscriptionOpen] = useState(false);
+  const [stripePaidSuccess, setStripePaidSuccess] = useState(false);
   const [isAdminPanelOpen, setIsAdminPanelOpen] = useState(false);
 
   // Load user and app data on mount + Listen to Firebase Auth
@@ -147,7 +150,10 @@ export default function App() {
             if (
               data.subscriptionStatus &&
               (data.subscriptionStatus !== currentUser.subscriptionStatus ||
-                data.trialEndsAt !== currentUser.trialEndsAt)
+                data.trialEndsAt !== currentUser.trialEndsAt ||
+                data.stripeCustomerId !== currentUser.stripeCustomerId ||
+                data.stripeSubscriptionId !== currentUser.stripeSubscriptionId ||
+                data.subscriptionExpiresAt !== currentUser.subscriptionExpiresAt)
             ) {
               const updated: UserAccount = {
                 ...currentUser,
@@ -155,9 +161,15 @@ export default function App() {
                 trialEndsAt: data.trialEndsAt || currentUser.trialEndsAt,
                 blockedAt: data.blockedAt,
                 subscriptionPaidAt: data.subscriptionPaidAt || currentUser.subscriptionPaidAt,
+                subscriptionExpiresAt:
+                  data.subscriptionExpiresAt || currentUser.subscriptionExpiresAt,
+                stripeCustomerId: data.stripeCustomerId || currentUser.stripeCustomerId,
+                stripeSubscriptionId:
+                  data.stripeSubscriptionId || currentUser.stripeSubscriptionId,
+                selectedPlan: data.selectedPlan || currentUser.selectedPlan,
               };
               setCurrentUser(updated);
-              setLocalCurrentUser(updated);
+              upsertLocalUser(updated);
             }
           }
         },
@@ -169,6 +181,93 @@ export default function App() {
     } catch {
       // Ignore if offline
     }
+  }, [currentUser?.id]);
+
+  // Handle Stripe Checkout return (?stripe_status=success&session_id=...) and sync Stripe subscription state
+  useEffect(() => {
+    if (!currentUser?.id) return;
+
+    const params = new URLSearchParams(window.location.search);
+    const stripeStatus = params.get('stripe_status');
+    const sessionId = params.get('session_id');
+
+    let cancelled = false;
+
+    if (stripeStatus === 'success' && sessionId) {
+      fetch('/api/stripe/verify-session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId, userId: currentUser.id }),
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          if (cancelled) return;
+          if (data?.verified) {
+            const updated: UserAccount = {
+              ...currentUser,
+              subscriptionStatus: data.subscriptionStatus || 'active',
+              stripeCustomerId: data.stripeCustomerId || currentUser.stripeCustomerId,
+              stripeSubscriptionId:
+                data.stripeSubscriptionId || currentUser.stripeSubscriptionId,
+              selectedPlan: data.plan || currentUser.selectedPlan,
+              planPrice: data.planPrice || currentUser.planPrice,
+              subscriptionPaidAt: new Date().toISOString(),
+              subscriptionExpiresAt:
+                data.currentPeriodEnd || currentUser.subscriptionExpiresAt,
+            };
+            setCurrentUser(updated);
+            upsertLocalUser(updated);
+            saveUserProfileFirestore(updated).catch(console.error);
+            playSaleChime();
+            setStripePaidSuccess(true);
+            setIsSubscriptionOpen(true);
+          }
+        })
+        .catch((err) => {
+          console.warn('Stripe return verification warning:', err);
+        })
+        .finally(() => {
+          window.history.replaceState({}, document.title, window.location.pathname);
+        });
+    } else if (stripeStatus === 'cancel') {
+      window.history.replaceState({}, document.title, window.location.pathname);
+    } else if (currentUser.stripeCustomerId && currentUser.subscriptionStatus !== 'blocked') {
+      const qs = new URLSearchParams({
+        userId: currentUser.id,
+        customerId: currentUser.stripeCustomerId,
+      });
+      fetch(`/api/stripe/subscription-status?${qs.toString()}`)
+        .then((res) => res.json())
+        .then((data) => {
+          if (cancelled || !data?.found || !data?.subscriptionStatus) return;
+          if (
+            data.subscriptionStatus !== currentUser.subscriptionStatus ||
+            data.stripeSubscriptionId !== currentUser.stripeSubscriptionId ||
+            data.subscriptionExpiresAt !== currentUser.subscriptionExpiresAt
+          ) {
+            const updated: UserAccount = {
+              ...currentUser,
+              subscriptionStatus: data.subscriptionStatus,
+              stripeCustomerId: data.stripeCustomerId || currentUser.stripeCustomerId,
+              stripeSubscriptionId:
+                data.stripeSubscriptionId || currentUser.stripeSubscriptionId,
+              selectedPlan: data.selectedPlan || currentUser.selectedPlan,
+              subscriptionExpiresAt:
+                data.subscriptionExpiresAt || currentUser.subscriptionExpiresAt,
+            };
+            setCurrentUser(updated);
+            upsertLocalUser(updated);
+            saveUserProfileFirestore(updated).catch(console.error);
+          }
+        })
+        .catch(() => {
+          // Non-blocking sync
+        });
+    }
+
+    return () => {
+      cancelled = true;
+    };
   }, [currentUser?.id]);
 
   const syncDataWithFirestore = async (user: UserAccount) => {
@@ -649,11 +748,15 @@ export default function App() {
         {/* Modal de Assinatura se o usuário quiser assinar diretamente da tela de bloqueio */}
         <SubscriptionModal
           isOpen={isSubscriptionOpen}
-          onClose={() => setIsSubscriptionOpen(false)}
+          onClose={() => {
+            setIsSubscriptionOpen(false);
+            setStripePaidSuccess(false);
+          }}
           user={currentUser}
+          initialPaidSuccess={stripePaidSuccess}
           onSuccess={(updatedUser: UserAccount) => {
             setCurrentUser(updatedUser);
-            setLocalCurrentUser(updatedUser);
+            upsertLocalUser(updatedUser);
             saveUserProfileFirestore(updatedUser).catch(console.error);
             refreshAllData(updatedUser);
           }}
@@ -827,11 +930,15 @@ export default function App() {
 
       <SubscriptionModal
         isOpen={isSubscriptionOpen}
-        onClose={() => setIsSubscriptionOpen(false)}
+        onClose={() => {
+          setIsSubscriptionOpen(false);
+          setStripePaidSuccess(false);
+        }}
         user={currentUser}
+        initialPaidSuccess={stripePaidSuccess}
         onSuccess={(updatedUser: UserAccount) => {
           setCurrentUser(updatedUser);
-          setLocalCurrentUser(updatedUser);
+          upsertLocalUser(updatedUser);
           saveUserProfileFirestore(updatedUser).catch(console.error);
           refreshAllData(updatedUser);
         }}

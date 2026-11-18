@@ -298,13 +298,17 @@ export const AccountSettingsView: React.FC<AccountSettingsViewProps> = ({
             )}
           </div>
 
-          {onOpenSubscriptionModal && user?.subscriptionStatus !== 'active' && !isSuperAdmin && (
+          {onOpenSubscriptionModal && (
             <button
               type="button"
               onClick={onOpenSubscriptionModal}
               className="text-xs font-bold text-emerald-700 hover:underline"
             >
-              Ver Plano
+              {isSuperAdmin
+                ? 'Testar Assinatura Stripe'
+                : user?.subscriptionStatus === 'active'
+                ? 'Gerenciar Assinatura'
+                : 'Ver Plano'}
             </button>
           )}
         </div>

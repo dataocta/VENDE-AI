@@ -56,6 +56,11 @@ export async function saveUserProfileFirestore(user: UserAccount): Promise<void>
       trialEndsAt: user.trialEndsAt || '',
       subscriptionStatus: user.subscriptionStatus || 'trial',
       planPrice: user.planPrice || 15.97,
+      selectedPlan: user.selectedPlan,
+      stripeCustomerId: user.stripeCustomerId,
+      stripeSubscriptionId: user.stripeSubscriptionId,
+      subscriptionPaidAt: user.subscriptionPaidAt,
+      subscriptionExpiresAt: user.subscriptionExpiresAt,
     });
     await setDoc(doc(db, 'users', user.id), data, { merge: true });
   } catch (err) {
@@ -79,6 +84,11 @@ export async function getUserProfileFirestore(uid: string): Promise<UserAccount 
       trialEndsAt: data.trialEndsAt || '',
       subscriptionStatus: data.subscriptionStatus || 'trial',
       planPrice: data.planPrice || 15.97,
+      selectedPlan: data.selectedPlan,
+      stripeCustomerId: data.stripeCustomerId,
+      stripeSubscriptionId: data.stripeSubscriptionId,
+      subscriptionPaidAt: data.subscriptionPaidAt,
+      subscriptionExpiresAt: data.subscriptionExpiresAt,
     };
   } catch (err) {
     handleFirestoreError(err, OperationType.GET, path);
@@ -103,6 +113,11 @@ export async function getAllUsersFirestore(): Promise<UserAccount[]> {
         trialEndsAt: data.trialEndsAt || '',
         subscriptionStatus: (data.subscriptionStatus as SubscriptionStatus) || 'trial',
         planPrice: data.planPrice || 15.97,
+        selectedPlan: data.selectedPlan,
+        stripeCustomerId: data.stripeCustomerId,
+        stripeSubscriptionId: data.stripeSubscriptionId,
+        subscriptionPaidAt: data.subscriptionPaidAt,
+        subscriptionExpiresAt: data.subscriptionExpiresAt,
       });
     });
     return list;

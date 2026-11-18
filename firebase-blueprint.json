@@ -13,7 +13,12 @@
         "createdAt": { "type": "string" },
         "trialEndsAt": { "type": "string" },
         "subscriptionStatus": { "type": "string" },
-        "planPrice": { "type": "number" }
+        "planPrice": { "type": "number" },
+        "selectedPlan": { "type": "string" },
+        "stripeCustomerId": { "type": "string" },
+        "stripeSubscriptionId": { "type": "string" },
+        "subscriptionPaidAt": { "type": "string" },
+        "subscriptionExpiresAt": { "type": "string" }
       },
       "required": ["userId", "name", "email"]
     },
