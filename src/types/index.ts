@@ -132,3 +132,15 @@ export interface UserAccount {
   stripeCustomerId?: string;
   stripeSubscriptionId?: string;
 }
+
+export interface PendingStripeCheckout {
+  sessionId: string;
+  stripeCustomerId?: string;
+  stripeSubscriptionId?: string;
+  subscriptionStatus: SubscriptionStatus;
+  customerEmail?: string;
+  customerName?: string;
+  plan: 'trial' | 'monthly' | 'annual';
+  planPrice: number;
+  currentPeriodEnd?: string;
+}

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Lock,
   Mail,
@@ -16,6 +16,11 @@ import {
   Receipt,
   RotateCcw,
   Plus,
+  ExternalLink,
+  Loader2,
+  CreditCard,
+  X,
+  CheckCircle2,
 } from 'lucide-react';
 import { signInWithPopup } from 'firebase/auth';
 import { auth, googleProvider } from '../firebase';
@@ -27,7 +32,7 @@ import {
   setCurrentUser,
 } from '../utils/authStorage';
 import { getUserProfileFirestore, saveUserProfileFirestore } from '../utils/firestoreService';
-import { UserAccount } from '../types';
+import { UserAccount, PendingStripeCheckout } from '../types';
 
 import vendorHeroImg from '../assets/images/vendeai_vendor_hero_1794571379307.jpg';
 import posShowcaseImg from '../assets/images/vendeai_pos_showcase_1794503121729.jpg';
@@ -39,14 +44,31 @@ type TourTabId = 'pdv' | 'caixa' | 'whatsapp';
 
 interface AuthViewProps {
   onAuthSuccess: (user: UserAccount) => void;
+  pendingStripeCheckout?: PendingStripeCheckout | null;
+  stripeCheckoutCancelled?: boolean;
+  onClearPendingStripe?: () => void;
 }
 
-export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
+export const AuthView: React.FC<AuthViewProps> = ({
+  onAuthSuccess,
+  pendingStripeCheckout = null,
+  stripeCheckoutCancelled = false,
+  onClearPendingStripe,
+}) => {
   // Page view: 'landing' (apresentação + planos) ou 'auth' (login / cadastro)
-  const [pageView, setPageView] = useState<'landing' | 'auth'>('landing');
+  const [pageView, setPageView] = useState<'landing' | 'auth'>(() =>
+    pendingStripeCheckout ? 'auth' : 'landing'
+  );
 
   // Selected plan state
-  const [selectedPlan, setSelectedPlan] = useState<PlanId>('monthly');
+  const [selectedPlan, setSelectedPlan] = useState<PlanId>(() =>
+    pendingStripeCheckout?.plan || 'monthly'
+  );
+
+  // Pre-login Stripe Checkout state
+  const [isStartingCheckout, setIsStartingCheckout] = useState<PlanId | null>(null);
+  const [stripeCheckoutUrl, setStripeCheckoutUrl] = useState<string | null>(null);
+  const [stripeCheckoutError, setStripeCheckoutError] = useState<string | null>(null);
 
   // Landing page interactive states
   const [heroMode, setHeroMode] = useState<'photo' | 'simulator'>('photo');
@@ -63,7 +85,9 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
   const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(0);
 
   // Auth form mode
-  const [mode, setMode] = useState<'login' | 'register'>('register');
+  const [mode, setMode] = useState<'login' | 'register'>(() =>
+    pendingStripeCheckout ? 'register' : 'login'
+  );
 
   // Login inputs
   const [loginIdentifier, setLoginIdentifier] = useState('');
@@ -71,13 +95,30 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
   const [showPassword, setShowPassword] = useState(false);
 
   // Register inputs
-  const [regName, setRegName] = useState('');
-  const [regEmail, setRegEmail] = useState('');
+  const [regName, setRegName] = useState(() => pendingStripeCheckout?.customerName || '');
+  const [regEmail, setRegEmail] = useState(() => pendingStripeCheckout?.customerEmail || '');
   const [regPhone, setRegPhone] = useState('');
   const [regPassword, setRegPassword] = useState('');
 
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    if (pendingStripeCheckout) {
+      setPageView('auth');
+      setMode('register');
+      setSelectedPlan(pendingStripeCheckout.plan || 'monthly');
+      if (pendingStripeCheckout.customerName && !regName) {
+        setRegName(pendingStripeCheckout.customerName);
+      }
+      if (pendingStripeCheckout.customerEmail && !regEmail) {
+        setRegEmail(pendingStripeCheckout.customerEmail);
+      }
+      setStripeCheckoutUrl(null);
+      setStripeCheckoutError(null);
+      setErrorMessage(null);
+    }
+  }, [pendingStripeCheckout]);
 
   const plansConfig: Record<
     PlanId,
@@ -246,17 +287,70 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
     setSimReceiptSent(false);
   };
 
-  const handleSelectPlanAndProceed = (planId: PlanId) => {
+  const startPreLoginStripeCheckout = async (
+    planId: PlanId,
+    prefill?: { name?: string; email?: string }
+  ) => {
     setSelectedPlan(planId);
-    setMode('register');
+    setStripeCheckoutError(null);
     setErrorMessage(null);
-    setPageView('auth');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    setStripeCheckoutUrl(null);
+    setIsStartingCheckout(planId);
+
+    try {
+      const response = await fetch('/api/stripe/create-checkout-session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          plan: planId,
+          name: prefill?.name?.trim() || undefined,
+          email: prefill?.email?.trim() || undefined,
+          returnUrl: window.location.origin,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data?.url) {
+        const msg =
+          data?.error || 'Não foi possível iniciar o checkout da Stripe agora.';
+        setStripeCheckoutError(msg);
+        setErrorMessage(msg);
+        return;
+      }
+
+      const isInIframe = typeof window !== 'undefined' && window.self !== window.top;
+      if (!isInIframe) {
+        window.location.assign(data.url);
+        return;
+      }
+
+      setStripeCheckoutUrl(data.url);
+    } catch {
+      const msg = 'Erro de conexão ao iniciar o pagamento na Stripe.';
+      setStripeCheckoutError(msg);
+      setErrorMessage(msg);
+    } finally {
+      setIsStartingCheckout(null);
+    }
+  };
+
+  const handleSelectPlanAndProceed = (planId: PlanId) => {
+    if (pendingStripeCheckout) {
+      setSelectedPlan(planId);
+      setMode('register');
+      setErrorMessage(null);
+      setPageView('auth');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+    startPreLoginStripeCheckout(planId);
   };
 
   const handleGoToLoginDirect = () => {
     setMode('login');
     setErrorMessage(null);
+    setStripeCheckoutError(null);
     setPageView('auth');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -280,9 +374,19 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
   const handleRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
+
+    if (!pendingStripeCheckout) {
+      await startPreLoginStripeCheckout(selectedPlan, {
+        name: regName,
+        email: regEmail,
+      });
+      return;
+    }
+
     setIsLoading(true);
 
     const planData = plansConfig[selectedPlan];
+    const nowIso = new Date().toISOString();
 
     const res = registerUser({
       name: regName,
@@ -290,8 +394,17 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
       phone: regPhone,
       password: regPassword,
       businessName: `Vendas de ${regName.split(' ')[0] || 'Rua'}`,
-      planPrice: planData.priceNumber,
-      selectedPlan,
+      planPrice: pendingStripeCheckout.planPrice || planData.priceNumber,
+      selectedPlan: pendingStripeCheckout.plan || selectedPlan,
+      subscriptionStatus: pendingStripeCheckout.subscriptionStatus || 'active',
+      stripeCustomerId: pendingStripeCheckout.stripeCustomerId,
+      stripeSubscriptionId: pendingStripeCheckout.stripeSubscriptionId,
+      subscriptionPaidAt: nowIso,
+      subscriptionExpiresAt: pendingStripeCheckout.currentPeriodEnd,
+      trialEndsAt:
+        pendingStripeCheckout.subscriptionStatus === 'trial'
+          ? pendingStripeCheckout.currentPeriodEnd
+          : undefined,
     });
 
     if (res.success && res.user) {
@@ -335,12 +448,46 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
           phone: fbUser.phoneNumber || existingLocal?.phone || '',
           businessName: existingLocal?.businessName || `Vendas de ${cleanName.split(' ')[0]}`,
           createdAt: existingLocal?.createdAt || now.toISOString(),
-          trialEndsAt: existingLocal?.trialEndsAt || sevenDaysLater.toISOString(),
-          subscriptionStatus: existingLocal?.subscriptionStatus || 'trial',
-          planPrice: planData.priceNumber,
-          selectedPlan,
+          trialEndsAt:
+            pendingStripeCheckout?.subscriptionStatus === 'trial' &&
+            pendingStripeCheckout.currentPeriodEnd
+              ? pendingStripeCheckout.currentPeriodEnd
+              : existingLocal?.trialEndsAt || sevenDaysLater.toISOString(),
+          subscriptionStatus:
+            pendingStripeCheckout?.subscriptionStatus ||
+            existingLocal?.subscriptionStatus ||
+            'trial',
+          planPrice: pendingStripeCheckout?.planPrice || planData.priceNumber,
+          selectedPlan: pendingStripeCheckout?.plan || selectedPlan,
+          stripeCustomerId:
+            pendingStripeCheckout?.stripeCustomerId || existingLocal?.stripeCustomerId,
+          stripeSubscriptionId:
+            pendingStripeCheckout?.stripeSubscriptionId ||
+            existingLocal?.stripeSubscriptionId,
+          subscriptionPaidAt: pendingStripeCheckout
+            ? now.toISOString()
+            : existingLocal?.subscriptionPaidAt,
+          subscriptionExpiresAt:
+            pendingStripeCheckout?.currentPeriodEnd ||
+            existingLocal?.subscriptionExpiresAt,
         };
 
+        await saveUserProfileFirestore(userAccount);
+      } else if (pendingStripeCheckout) {
+        userAccount = {
+          ...userAccount,
+          subscriptionStatus: pendingStripeCheckout.subscriptionStatus || 'active',
+          stripeCustomerId:
+            pendingStripeCheckout.stripeCustomerId || userAccount.stripeCustomerId,
+          stripeSubscriptionId:
+            pendingStripeCheckout.stripeSubscriptionId ||
+            userAccount.stripeSubscriptionId,
+          selectedPlan: pendingStripeCheckout.plan || userAccount.selectedPlan,
+          planPrice: pendingStripeCheckout.planPrice || userAccount.planPrice,
+          subscriptionPaidAt: new Date().toISOString(),
+          subscriptionExpiresAt:
+            pendingStripeCheckout.currentPeriodEnd || userAccount.subscriptionExpiresAt,
+        };
         await saveUserProfileFirestore(userAccount);
       }
 
@@ -452,11 +599,21 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 pt-1">
                 <button
                   type="button"
-                  onClick={() => handleSelectPlanAndProceed('trial')}
-                  className="min-h-[50px] px-6 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm sm:text-base flex items-center justify-center gap-2 shadow-sm transition-colors touch-press whitespace-nowrap"
+                  disabled={isStartingCheckout !== null}
+                  onClick={() => handleSelectPlanAndProceed('monthly')}
+                  className="min-h-[50px] px-6 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-70 text-white font-bold text-sm sm:text-base flex items-center justify-center gap-2 shadow-sm transition-colors touch-press whitespace-nowrap"
                 >
-                  <span>Começar 7 Dias Grátis</span>
-                  <ArrowRight className="w-4 h-4" />
+                  {isStartingCheckout === 'monthly' ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Abrindo Stripe Checkout...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>Assinar Agora na Stripe</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </>
+                  )}
                 </button>
 
                 <a
@@ -855,15 +1012,25 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
 
                     <button
                       type="button"
+                      disabled={isStartingCheckout !== null}
                       onClick={() => handleSelectPlanAndProceed(pId)}
-                      className={`w-full min-h-[48px] rounded-xl font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-colors mt-7 touch-press ${
+                      className={`w-full min-h-[48px] rounded-xl font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-colors mt-7 touch-press disabled:opacity-70 ${
                         isPro
                           ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950'
                           : 'bg-slate-900 hover:bg-slate-800 text-white'
                       }`}
                     >
-                      <span>{plan.buttonLabel}</span>
-                      <ArrowRight className="w-4 h-4" />
+                      {isStartingCheckout === pId ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <span>Conectando à Stripe...</span>
+                        </>
+                      ) : (
+                        <>
+                          <span>{plan.buttonLabel}</span>
+                          <ArrowRight className="w-4 h-4" />
+                        </>
+                      )}
                     </button>
                   </div>
                 );
@@ -958,6 +1125,82 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
             </div>
           </div>
         </footer>
+
+        {/* Pre-login Stripe Checkout Handoff Modal (shown when running inside an iframe or on errors) */}
+        {(stripeCheckoutUrl || stripeCheckoutError || stripeCheckoutCancelled) && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
+            <div className="w-full max-w-md bg-white border border-slate-200 rounded-3xl p-6 shadow-2xl space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <CreditCard className="w-5 h-5 text-emerald-600" />
+                  <h3 className="text-base font-extrabold text-slate-900">
+                    {stripeCheckoutError
+                      ? 'Erro ao iniciar Checkout'
+                      : stripeCheckoutCancelled
+                      ? 'Checkout cancelado'
+                      : 'Checkout Seguro da Stripe'}
+                  </h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setStripeCheckoutUrl(null);
+                    setStripeCheckoutError(null);
+                    onClearPendingStripe?.();
+                  }}
+                  className="w-8 h-8 rounded-full bg-slate-100 text-slate-500 hover:text-slate-800 flex items-center justify-center"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {stripeCheckoutError ? (
+                <div className="p-3 rounded-2xl bg-rose-50 border border-rose-200 text-xs text-rose-800">
+                  {stripeCheckoutError}
+                </div>
+              ) : stripeCheckoutUrl ? (
+                <>
+                  <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-900 space-y-1">
+                    <div className="font-bold">
+                      Plano selecionado: {plansConfig[selectedPlan].name} (
+                      {plansConfig[selectedPlan].priceStr}{' '}
+                      {plansConfig[selectedPlan].period})
+                    </div>
+                    <p className="text-emerald-800">
+                      Finalize o checkout seguro da Stripe primeiro. Assim que concluir, você voltará automaticamente para criar sua senha ou entrar com o Google.
+                    </p>
+                  </div>
+
+                  <a
+                    href={stripeCheckoutUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-full min-h-[48px] rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-sm flex items-center justify-center gap-2 shadow-xs transition-colors"
+                  >
+                    <span>Ir para Checkout Seguro da Stripe</span>
+                    <ExternalLink className="w-4 h-4" />
+                  </a>
+                </>
+              ) : (
+                <p className="text-xs text-slate-600">
+                  Você cancelou o checkout na Stripe. Escolha qualquer plano abaixo para tentar novamente quando quiser.
+                </p>
+              )}
+
+              <button
+                type="button"
+                onClick={() => {
+                  setStripeCheckoutUrl(null);
+                  setStripeCheckoutError(null);
+                  handleGoToLoginDirect();
+                }}
+                className="w-full py-2 text-xs font-bold text-slate-500 hover:text-slate-900 transition-colors"
+              >
+                Já tenho conta e quero fazer login
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -997,28 +1240,20 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
           </p>
         </div>
 
-        {/* Selected Plan Banner (no modo cadastro) */}
-        {mode === 'register' && (
-          <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200 text-xs flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2.5 min-w-0">
-              <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0">
-                <Check className="w-4 h-4" />
-              </div>
-              <div className="min-w-0">
-                <span className="font-extrabold text-slate-900 block truncate">{activePlanInfo.name}</span>
-                <span className="text-[11px] text-emerald-800 font-semibold font-mono-numbers">
-                  {activePlanInfo.priceStr} {activePlanInfo.period}
-                </span>
-              </div>
+        {/* Selected Plan or Confirmed Stripe Checkout Banner */}
+        {pendingStripeCheckout && (
+          <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-300 text-xs flex items-start gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0">
+              <CheckCircle2 className="w-4 h-4" />
             </div>
-
-            <button
-              type="button"
-              onClick={() => setPageView('landing')}
-              className="text-[11px] font-bold text-emerald-700 hover:text-emerald-900 hover:underline shrink-0"
-            >
-              Alterar
-            </button>
+            <div className="min-w-0">
+              <span className="font-extrabold text-emerald-950 block">
+                Checkout da Stripe Confirmado!
+              </span>
+              <span className="text-[11px] text-emerald-800 block mt-0.5">
+                Plano {activePlanInfo.name} liberado. Agora crie sua senha ou entre com o Google para acessar o sistema.
+              </span>
+            </div>
           </div>
         )}
 
@@ -1033,7 +1268,7 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
         {/* Clean Auth Card */}
         <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-xs space-y-4">
           
-          {/* Mode Switcher: Login vs Cadastro */}
+          {/* Mode Switcher: Fazer Login vs Escolher Planos (ou Finalizar Cadastro após Stripe) */}
           <div className="grid grid-cols-2 gap-1 p-1 bg-slate-100 rounded-2xl">
             <button
               type="button"
@@ -1049,57 +1284,79 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
             >
               Fazer Login
             </button>
-            <button
-              type="button"
-              onClick={() => {
-                setMode('register');
-                setErrorMessage(null);
-              }}
-              className={`py-2 text-xs font-bold rounded-xl transition-all ${
-                mode === 'register'
-                  ? 'bg-emerald-600 text-white shadow-xs'
-                  : 'text-slate-500 hover:text-slate-900'
-              }`}
-            >
-              Criar Conta
-            </button>
+            {pendingStripeCheckout ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setMode('register');
+                  setErrorMessage(null);
+                }}
+                className={`py-2 text-xs font-bold rounded-xl transition-all ${
+                  mode === 'register'
+                    ? 'bg-emerald-600 text-white shadow-xs'
+                    : 'text-slate-500 hover:text-slate-900'
+                }`}
+              >
+                Finalizar Cadastro
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  setErrorMessage(null);
+                  setPageView('landing');
+                  setTimeout(() => {
+                    document
+                      .getElementById('planos')
+                      ?.scrollIntoView({ behavior: 'smooth' });
+                  }, 60);
+                }}
+                className="py-2 text-xs font-bold rounded-xl transition-all text-emerald-700 hover:text-emerald-900 hover:bg-emerald-50"
+              >
+                Escolher Planos
+              </button>
+            )}
           </div>
 
-          {/* 1. Botão Oficial: Login com o Google */}
-          <button
-            type="button"
-            onClick={handleGoogleRealLogin}
-            disabled={isLoading}
-            className="w-full min-h-[46px] rounded-2xl bg-white hover:bg-slate-50 border border-slate-300 text-slate-800 font-bold text-xs flex items-center justify-center gap-2.5 shadow-xs touch-press transition-colors disabled:opacity-50"
-          >
-            <svg className="w-4 h-4" viewBox="0 0 24 24">
-              <path
-                fill="#4285F4"
-                d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-              />
-              <path
-                fill="#34A853"
-                d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-              />
-              <path
-                fill="#FBBC05"
-                d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
-              />
-              <path
-                fill="#EA4335"
-                d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
-              />
-            </svg>
-            <span>{isLoading ? 'Conectando ao Google...' : 'Continuar com o Google'}</span>
-          </button>
+          {/* 1. Botão Oficial: Login com o Google (disponível no Login ou após concluir Checkout Stripe) */}
+          {(mode === 'login' || pendingStripeCheckout) && (
+            <>
+              <button
+                type="button"
+                onClick={handleGoogleRealLogin}
+                disabled={isLoading}
+                className="w-full min-h-[46px] rounded-2xl bg-white hover:bg-slate-50 border border-slate-300 text-slate-800 font-bold text-xs flex items-center justify-center gap-2.5 shadow-xs touch-press transition-colors disabled:opacity-50"
+              >
+                <svg className="w-4 h-4" viewBox="0 0 24 24">
+                  <path
+                    fill="#4285F4"
+                    d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                  />
+                  <path
+                    fill="#34A853"
+                    d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                  />
+                  <path
+                    fill="#FBBC05"
+                    d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
+                  />
+                  <path
+                    fill="#EA4335"
+                    d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
+                  />
+                </svg>
+                <span>{isLoading ? 'Conectando ao Google...' : 'Continuar com o Google'}</span>
+              </button>
 
-          {/* Divider */}
-          <div className="relative flex items-center justify-center">
-            <div className="w-full border-t border-slate-200" />
-            <span className="bg-white px-2.5 text-[11px] text-slate-400 font-medium">
-              ou com e-mail e senha
-            </span>
-          </div>
+              {/* Divider */}
+              <div className="relative flex items-center justify-center">
+                <div className="w-full border-t border-slate-200" />
+                <span className="bg-white px-2.5 text-[11px] text-slate-400 font-medium">
+                  ou com e-mail e senha
+                </span>
+              </div>
+            </>
+          )}
 
           {/* Modo Login */}
           {mode === 'login' ? (
@@ -1154,8 +1411,94 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
                 <ArrowRight className="w-3.5 h-3.5" />
               </button>
             </form>
+          ) : !pendingStripeCheckout ? (
+            /* Modo Cadastro antes de pagar -> Obriga passar pelo Checkout da Stripe primeiro */
+            <div className="space-y-3">
+              <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 text-xs text-slate-700 space-y-1.5">
+                <div className="font-extrabold text-slate-900">
+                  Passo 1 de 2: Checkout Seguro na Stripe
+                </div>
+                <p className="text-slate-600 leading-relaxed">
+                  Antes do seu primeiro acesso, conclua a assinatura ou ative o teste no Checkout da Stripe. Logo após finalizar, você cria sua senha e entra no sistema.
+                </p>
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-slate-700 block mb-1">
+                  Seu Nome Completo
+                </label>
+                <div className="relative">
+                  <User className="w-4 h-4 text-slate-400 absolute left-3 top-3.5" />
+                  <input
+                    type="text"
+                    placeholder="Ex: Carlos Silva"
+                    value={regName}
+                    onChange={(e) => setRegName(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-white border border-slate-300 text-slate-900 text-xs focus:outline-none focus:border-emerald-500 font-medium"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-slate-700 block mb-1">
+                  E-mail (usado no recibo Stripe)
+                </label>
+                <div className="relative">
+                  <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-3.5" />
+                  <input
+                    type="email"
+                    placeholder="seuemail@gmail.com"
+                    value={regEmail}
+                    onChange={(e) => setRegEmail(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-white border border-slate-300 text-slate-900 text-xs focus:outline-none focus:border-emerald-500 font-medium"
+                  />
+                </div>
+              </div>
+
+              {stripeCheckoutUrl && (
+                <div className="p-3 rounded-2xl bg-emerald-50 border border-emerald-300 space-y-2">
+                  <div className="text-[11px] font-bold text-emerald-900">
+                    Sessão criada! Clique abaixo para abrir o Checkout da Stripe:
+                  </div>
+                  <a
+                    href={stripeCheckoutUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-full min-h-[44px] rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs flex items-center justify-center gap-2 shadow-xs"
+                  >
+                    <span>Abrir Checkout Seguro da Stripe</span>
+                    <ExternalLink className="w-4 h-4" />
+                  </a>
+                </div>
+              )}
+
+              <button
+                type="button"
+                disabled={isStartingCheckout !== null}
+                onClick={() =>
+                  startPreLoginStripeCheckout(selectedPlan, {
+                    name: regName,
+                    email: regEmail,
+                  })
+                }
+                className="w-full min-h-[48px] rounded-2xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-70 text-white font-extrabold text-xs flex items-center justify-center gap-2 shadow-xs touch-press transition-colors tracking-wide"
+              >
+                {isStartingCheckout !== null ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>CONECTANDO À STRIPE...</span>
+                  </>
+                ) : (
+                  <>
+                    <CreditCard className="w-4 h-4" />
+                    <span>IR PARA CHECKOUT DA STRIPE</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </>
+                )}
+              </button>
+            </div>
           ) : (
-            /* Modo Cadastro */
+            /* Modo Cadastro após concluir Checkout Stripe */
             <form onSubmit={handleRegisterSubmit} className="space-y-3">
               <div>
                 <label className="text-xs font-semibold text-slate-700 block mb-1">
@@ -1230,7 +1573,7 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
                 disabled={isLoading}
                 className="w-full min-h-[46px] rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs flex items-center justify-center gap-1.5 shadow-xs touch-press transition-colors tracking-wide mt-2"
               >
-                <span>{isLoading ? 'CRIANDO CONTA...' : 'CRIAR CONTA E COMEÇAR'}</span>
+                <span>{isLoading ? 'CRIANDO CONTA...' : 'FINALIZAR CADASTRO E ENTRAR'}</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </button>
             </form>

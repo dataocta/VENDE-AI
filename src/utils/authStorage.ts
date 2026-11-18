@@ -110,6 +110,12 @@ export function registerUser(params: {
   businessName: string;
   planPrice?: number;
   selectedPlan?: 'trial' | 'monthly' | 'annual';
+  subscriptionStatus?: SubscriptionStatus;
+  stripeCustomerId?: string;
+  stripeSubscriptionId?: string;
+  subscriptionPaidAt?: string;
+  subscriptionExpiresAt?: string;
+  trialEndsAt?: string;
 }): { success: boolean; user?: UserAccount; error?: string } {
   const users = getRegisteredUsers();
   const cleanEmail = params.email.trim().toLowerCase();
@@ -151,10 +157,14 @@ export function registerUser(params: {
     businessName: params.businessName.trim() || `Vendas de ${params.name.split(' ')[0]}`,
     password: params.password || '123456',
     createdAt: now.toISOString(),
-    trialEndsAt: sevenDaysLater.toISOString(),
-    subscriptionStatus: 'trial',
+    trialEndsAt: params.trialEndsAt || sevenDaysLater.toISOString(),
+    subscriptionStatus: params.subscriptionStatus || 'trial',
     planPrice: params.planPrice || 15.97,
     selectedPlan: params.selectedPlan || 'trial',
+    stripeCustomerId: params.stripeCustomerId,
+    stripeSubscriptionId: params.stripeSubscriptionId,
+    subscriptionPaidAt: params.subscriptionPaidAt,
+    subscriptionExpiresAt: params.subscriptionExpiresAt,
   };
 
   users.unshift(newUser);

@@ -71,7 +71,30 @@ import {
   getUserProfileFirestore,
   saveUserProfileFirestore,
 } from './utils/firestoreService';
-import { Sale, Expense, CustomerDebt, Customer, Product, DailyRegister, BusinessSettings, UserAccount } from './types';
+import { Sale, Expense, CustomerDebt, Customer, Product, DailyRegister, BusinessSettings, UserAccount, PendingStripeCheckout } from './types';
+
+const PENDING_STRIPE_KEY = 'vendeai_pending_stripe_v1';
+
+function readPendingStripe(): PendingStripeCheckout | null {
+  try {
+    const raw = localStorage.getItem(PENDING_STRIPE_KEY);
+    return raw ? (JSON.parse(raw) as PendingStripeCheckout) : null;
+  } catch {
+    return null;
+  }
+}
+
+function savePendingStripe(data: PendingStripeCheckout | null) {
+  try {
+    if (data) {
+      localStorage.setItem(PENDING_STRIPE_KEY, JSON.stringify(data));
+    } else {
+      localStorage.removeItem(PENDING_STRIPE_KEY);
+    }
+  } catch {
+    // Ignore storage errors
+  }
+}
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<UserAccount | null>(null);
@@ -94,6 +117,10 @@ export default function App() {
   const [isCloseRegisterOpen, setIsCloseRegisterOpen] = useState(false);
   const [isSubscriptionOpen, setIsSubscriptionOpen] = useState(false);
   const [stripePaidSuccess, setStripePaidSuccess] = useState(false);
+  const [pendingStripeCheckout, setPendingStripeCheckout] = useState<PendingStripeCheckout | null>(() =>
+    readPendingStripe()
+  );
+  const [stripeCheckoutCancelled, setStripeCheckoutCancelled] = useState(false);
   const [isAdminPanelOpen, setIsAdminPanelOpen] = useState(false);
 
   // Load user and app data on mount + Listen to Firebase Auth
@@ -109,18 +136,31 @@ export default function App() {
         if (!user) {
           const now = new Date();
           const sevenDaysLater = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+          const pendingStripe = readPendingStripe();
           user = {
             id: fbUser.uid,
-            name: fbUser.displayName || 'Vendedor',
-            email: fbUser.email || '',
+            name: fbUser.displayName || pendingStripe?.customerName || 'Vendedor',
+            email: fbUser.email || pendingStripe?.customerEmail || '',
             phone: fbUser.phoneNumber || '',
             businessName: `Vendas de ${(fbUser.displayName || 'Rua').split(' ')[0]}`,
             createdAt: now.toISOString(),
-            trialEndsAt: sevenDaysLater.toISOString(),
-            subscriptionStatus: 'trial',
-            planPrice: 15.97,
+            trialEndsAt:
+              pendingStripe?.subscriptionStatus === 'trial' && pendingStripe.currentPeriodEnd
+                ? pendingStripe.currentPeriodEnd
+                : sevenDaysLater.toISOString(),
+            subscriptionStatus: pendingStripe?.subscriptionStatus || 'trial',
+            planPrice: pendingStripe?.planPrice || 15.97,
+            selectedPlan: pendingStripe?.plan || 'trial',
+            stripeCustomerId: pendingStripe?.stripeCustomerId,
+            stripeSubscriptionId: pendingStripe?.stripeSubscriptionId,
+            subscriptionPaidAt: pendingStripe ? now.toISOString() : undefined,
+            subscriptionExpiresAt: pendingStripe?.currentPeriodEnd,
           };
           await saveUserProfileFirestore(user);
+          if (pendingStripe) {
+            savePendingStripe(null);
+            setPendingStripeCheckout(null);
+          }
         }
         setLocalCurrentUser(user);
         setCurrentUser(user);
@@ -183,10 +223,8 @@ export default function App() {
     }
   }, [currentUser?.id]);
 
-  // Handle Stripe Checkout return (?stripe_status=success&session_id=...) and sync Stripe subscription state
+  // Handle Stripe Checkout return (?stripe_status=success&session_id=...) both before and after login
   useEffect(() => {
-    if (!currentUser?.id) return;
-
     const params = new URLSearchParams(window.location.search);
     const stripeStatus = params.get('stripe_status');
     const sessionId = params.get('session_id');
@@ -197,30 +235,54 @@ export default function App() {
       fetch('/api/stripe/verify-session', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId, userId: currentUser.id }),
+        body: JSON.stringify({ sessionId, userId: currentUser?.id }),
       })
         .then((res) => res.json())
         .then((data) => {
           if (cancelled) return;
           if (data?.verified) {
-            const updated: UserAccount = {
-              ...currentUser,
-              subscriptionStatus: data.subscriptionStatus || 'active',
-              stripeCustomerId: data.stripeCustomerId || currentUser.stripeCustomerId,
-              stripeSubscriptionId:
-                data.stripeSubscriptionId || currentUser.stripeSubscriptionId,
-              selectedPlan: data.plan || currentUser.selectedPlan,
-              planPrice: data.planPrice || currentUser.planPrice,
-              subscriptionPaidAt: new Date().toISOString(),
-              subscriptionExpiresAt:
-                data.currentPeriodEnd || currentUser.subscriptionExpiresAt,
-            };
-            setCurrentUser(updated);
-            upsertLocalUser(updated);
-            saveUserProfileFirestore(updated).catch(console.error);
-            playSaleChime();
-            setStripePaidSuccess(true);
-            setIsSubscriptionOpen(true);
+            if (currentUser) {
+              const updated: UserAccount = {
+                ...currentUser,
+                subscriptionStatus: data.subscriptionStatus || 'active',
+                stripeCustomerId: data.stripeCustomerId || currentUser.stripeCustomerId,
+                stripeSubscriptionId:
+                  data.stripeSubscriptionId || currentUser.stripeSubscriptionId,
+                selectedPlan: data.plan || currentUser.selectedPlan,
+                planPrice: data.planPrice || currentUser.planPrice,
+                subscriptionPaidAt: new Date().toISOString(),
+                subscriptionExpiresAt:
+                  data.currentPeriodEnd || currentUser.subscriptionExpiresAt,
+                trialEndsAt:
+                  data.subscriptionStatus === 'trial' && data.currentPeriodEnd
+                    ? data.currentPeriodEnd
+                    : currentUser.trialEndsAt,
+              };
+              setCurrentUser(updated);
+              upsertLocalUser(updated);
+              saveUserProfileFirestore(updated).catch(console.error);
+              savePendingStripe(null);
+              setPendingStripeCheckout(null);
+              playSaleChime();
+              setStripePaidSuccess(true);
+              setIsSubscriptionOpen(true);
+            } else {
+              const pending: PendingStripeCheckout = {
+                sessionId,
+                stripeCustomerId: data.stripeCustomerId,
+                stripeSubscriptionId: data.stripeSubscriptionId,
+                subscriptionStatus: data.subscriptionStatus || 'active',
+                customerEmail: data.customerEmail,
+                customerName: data.customerName,
+                plan: data.plan || 'monthly',
+                planPrice: data.planPrice || 15.97,
+                currentPeriodEnd: data.currentPeriodEnd,
+              };
+              savePendingStripe(pending);
+              setPendingStripeCheckout(pending);
+              setStripeCheckoutCancelled(false);
+              playSaleChime();
+            }
           }
         })
         .catch((err) => {
@@ -230,8 +292,15 @@ export default function App() {
           window.history.replaceState({}, document.title, window.location.pathname);
         });
     } else if (stripeStatus === 'cancel') {
+      if (!currentUser) {
+        setStripeCheckoutCancelled(true);
+      }
       window.history.replaceState({}, document.title, window.location.pathname);
-    } else if (currentUser.stripeCustomerId && currentUser.subscriptionStatus !== 'blocked') {
+    } else if (
+      currentUser?.id &&
+      currentUser.stripeCustomerId &&
+      currentUser.subscriptionStatus !== 'blocked'
+    ) {
       const qs = new URLSearchParams({
         userId: currentUser.id,
         customerId: currentUser.stripeCustomerId,
@@ -661,7 +730,23 @@ export default function App() {
 
   // If user is not logged in, show AuthView
   if (!currentUser) {
-    return <AuthView onAuthSuccess={handleAuthSuccess} />;
+    return (
+      <AuthView
+        onAuthSuccess={(user) => {
+          savePendingStripe(null);
+          setPendingStripeCheckout(null);
+          setStripeCheckoutCancelled(false);
+          handleAuthSuccess(user);
+        }}
+        pendingStripeCheckout={pendingStripeCheckout}
+        stripeCheckoutCancelled={stripeCheckoutCancelled}
+        onClearPendingStripe={() => {
+          savePendingStripe(null);
+          setPendingStripeCheckout(null);
+          setStripeCheckoutCancelled(false);
+        }}
+      />
+    );
   }
 
   // Calculate trial info

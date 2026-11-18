@@ -297,20 +297,30 @@ async function startServer() {
         email?: string;
         name?: string;
         customerId?: string;
-        plan?: PlanType;
+        plan?: 'trial' | PlanType;
         trialDays?: number;
         returnUrl?: string;
       };
 
       const selectedPlan: PlanType = plan === 'annual' ? 'annual' : 'monthly';
-      const customer = await resolveOrCreateCustomer(stripe, {
-        userId,
-        email,
-        name,
-        customerId,
-      });
+      const effectiveTrialDays =
+        typeof trialDays === 'number' && trialDays > 0
+          ? trialDays
+          : plan === 'trial'
+          ? 7
+          : undefined;
 
-      if (userId) {
+      const hasCustomerIdentifier = Boolean(customerId?.trim() || email?.trim());
+      const customer = hasCustomerIdentifier
+        ? await resolveOrCreateCustomer(stripe, {
+            userId,
+            email,
+            name,
+            customerId,
+          })
+        : null;
+
+      if (userId && customer) {
         stripeUserByCustomerId.set(customer.id, userId);
       }
 
@@ -346,7 +356,7 @@ async function startServer() {
 
       const session = await stripe.checkout.sessions.create({
         mode: 'subscription',
-        customer: customer.id,
+        ...(customer ? { customer: customer.id } : {}),
         client_reference_id: userId || undefined,
         line_items: [lineItem],
         allow_promotion_codes: true,
@@ -355,12 +365,14 @@ async function startServer() {
         metadata: {
           ...(userId ? { userId } : {}),
           plan: selectedPlan,
+          requestedPlan: plan,
         },
         subscription_data: {
-          ...(trialDays && trialDays > 0 ? { trial_period_days: trialDays } : {}),
+          ...(effectiveTrialDays ? { trial_period_days: effectiveTrialDays } : {}),
           metadata: {
             ...(userId ? { userId } : {}),
             plan: selectedPlan,
+            requestedPlan: plan,
           },
         },
         success_url: successUrl,
@@ -370,7 +382,7 @@ async function startServer() {
       res.json({
         url: session.url,
         sessionId: session.id,
-        customerId: customer.id,
+        customerId: customer?.id,
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Erro ao criar sessão Stripe.';
@@ -400,7 +412,7 @@ async function startServer() {
       }
 
       const session = await stripe.checkout.sessions.retrieve(sessionId, {
-        expand: ['subscription'],
+        expand: ['subscription', 'customer'],
       });
 
       const sessionUserId = session.metadata?.userId || session.client_reference_id;
@@ -424,8 +436,20 @@ async function startServer() {
           ? session.subscription
           : subscriptionObj?.id;
 
+      const customerObj =
+        session.customer &&
+        typeof session.customer !== 'string' &&
+        !session.customer.deleted
+          ? session.customer
+          : null;
+
       const customerId =
-        typeof session.customer === 'string' ? session.customer : session.customer?.id;
+        typeof session.customer === 'string' ? session.customer : customerObj?.id;
+
+      const customerEmail =
+        session.customer_details?.email || customerObj?.email || undefined;
+      const customerName =
+        session.customer_details?.name || customerObj?.name || undefined;
 
       const selectedPlan = (session.metadata?.plan as PlanType) || 'monthly';
       const mappedStatus = subscriptionObj
@@ -453,6 +477,8 @@ async function startServer() {
         subscriptionStatus: mappedStatus,
         stripeCustomerId: customerId,
         stripeSubscriptionId: subscriptionId,
+        customerEmail,
+        customerName,
         plan: selectedPlan,
         planPrice: selectedPlan === 'annual' ? 149.9 : 15.97,
         currentPeriodEnd,
