@@ -40,11 +40,6 @@ import {
 import { getUserProfileFirestore, saveUserProfileFirestore } from '../utils/firestoreService';
 import { UserAccount, PendingStripeCheckout } from '../types';
 
-import vendorHeroImg from '../assets/images/vendeai_vendor_hero_1794571379307.jpg';
-import posShowcaseImg from '../assets/images/vendeai_pos_showcase_1794503121729.jpg';
-import dashboardShowcaseImg from '../assets/images/vendeai_dashboard_showcase_1794503140016.jpg';
-import whatsappFiadoImg from '../assets/images/vendeai_whatsapp_fiado_1794571379188.jpg';
-
 type PlanId = 'trial' | 'monthly' | 'annual';
 type TourTabId = 'pdv' | 'caixa' | 'whatsapp';
 
@@ -206,8 +201,6 @@ export const AuthView: React.FC<AuthViewProps> = ({
       eyebrow: string;
       title: string;
       description: string;
-      image: string;
-      imageAlt: string;
       highlights: string[];
     }
   > = {
@@ -218,8 +211,6 @@ export const AuthView: React.FC<AuthViewProps> = ({
       title: 'Registre vendas, serviços ou estornos em segundos',
       description:
         'Na correria da barraca ou do balcão, você não pode perder tempo. Digite direto no teclado numérico grande do celular ou use as teclas do computador para lançar na hora.',
-      image: posShowcaseImg,
-      imageAlt: 'Tela de Venda Rápida do Vende.ai com teclado numérico e Pix',
       highlights: [
         'Teclado numérico imediato no celular e atalhos físicos no PC',
         'Cálculo automático de troco quando o pagamento for em dinheiro',
@@ -234,8 +225,6 @@ export const AuthView: React.FC<AuthViewProps> = ({
       title: 'Saiba exatamente quanto entrou, saiu e sobrou no bolso',
       description:
         'Pare de misturar o dinheiro pessoal com o da barraca. Acompanhe o saldo por forma de pagamento, lance despesas com categorias personalizadas e veja seu lucro líquido real.',
-      image: dashboardShowcaseImg,
-      imageAlt: 'Painel Financeiro do Vende.ai exibindo vendas, lucro limpo e resumo diário',
       highlights: [
         'Separação clara entre Pix, Dinheiro Físico, Cartão e A Prazo',
         'Categorias personalizadas para produtos e também para suas despesas',
@@ -250,8 +239,6 @@ export const AuthView: React.FC<AuthViewProps> = ({
       title: 'Recibos no WhatsApp e caderno a prazo organizado',
       description:
         'Passe mais confiança aos clientes enviando o comprovante completo com um toque, já com sua Chave Pix. Controle quem está devendo e envie lembretes educados sem constrangimento.',
-      image: whatsappFiadoImg,
-      imageAlt: 'Comprovante de pagamento Pix e controle a prazo no WhatsApp pelo Vende.ai',
       highlights: [
         'Comprovante formatado com nome da barraca, itens e Chave Pix',
         'Controle de amortização e pagamentos parciais a prazo',
@@ -895,16 +882,18 @@ export const AuthView: React.FC<AuthViewProps> = ({
 
               {/* Content Frame */}
               {heroMode === 'photo' ? (
-                <div className="relative rounded-3xl overflow-hidden border border-slate-200 shadow-lg bg-slate-100 animate-reveal">
-                  <img
-                    src={vendorHeroImg}
-                    alt="Vendedora de pastel na feira usando o aplicativo Vende.ai no celular"
-                    className="w-full aspect-[4/3] object-cover"
-                  />
-                  <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-slate-950/85 via-slate-950/40 to-transparent p-5 text-white flex items-end justify-between gap-4">
+                <div className="relative rounded-3xl overflow-hidden border border-slate-200 shadow-lg bg-gradient-to-b from-slate-50 via-white to-emerald-50/40 animate-reveal flex flex-col">
+                  <div className="px-4 pt-5 pb-2 flex items-center justify-center">
+                    <img
+                      src="/assets/aistudio/Design_sem_nome_0b38a664.png"
+                      alt="Aplicativo Vende.ai no celular mostrando o caixa de hoje, entradas e saldo a prazo"
+                      className="w-full max-h-[420px] sm:max-h-[460px] object-contain mx-auto"
+                    />
+                  </div>
+                  <div className="bg-slate-900/95 px-5 py-4 text-white flex items-center justify-between gap-4">
                     <div>
                       <div className="text-sm font-bold">Feito para o ritmo da rua</div>
-                      <div className="text-xs text-slate-200">
+                      <div className="text-xs text-slate-300">
                         Interface simples com números grandes para usar sob o sol ou em movimento.
                       </div>
                     </div>
@@ -1055,22 +1044,10 @@ export const AuthView: React.FC<AuthViewProps> = ({
             {/* Dynamic Tour Content Area */}
             <div
               key={activeTour.id}
-              className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-center bg-white border border-slate-200 rounded-3xl p-5 sm:p-8 shadow-xs animate-reveal"
+              className="bg-white border border-slate-200 rounded-3xl p-5 sm:p-8 shadow-xs animate-reveal"
             >
-              {/* Mockup Image */}
-              <div className="lg:col-span-7">
-                <div className="rounded-2xl overflow-hidden border border-slate-200 bg-slate-100">
-                  <img
-                    src={activeTour.image}
-                    alt={activeTour.imageAlt}
-                    className="w-full aspect-[16/9] object-cover"
-                    loading="lazy"
-                  />
-                </div>
-              </div>
-
               {/* Description & Highlights */}
-              <div className="lg:col-span-5 space-y-5 text-left">
+              <div className="space-y-5 text-left">
                 <div className="space-y-2">
                   <div className="text-xs font-bold text-emerald-700">{activeTour.eyebrow}</div>
                   <h3 className="font-display text-xl sm:text-2xl font-extrabold text-slate-900 leading-snug">
