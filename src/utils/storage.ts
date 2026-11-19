@@ -299,6 +299,44 @@ export function saveCustomerDebt(debt: CustomerDebt, userId?: string): CustomerD
   return debts;
 }
 
+export function isFiadoPaymentEntry(sale: Sale): boolean {
+  return (
+    sale.entryType === 'recebimento_fiado' ||
+    sale.id.startsWith('rec_') ||
+    sale.category === 'Recebimento Fiado' ||
+    sale.category === 'Recebimento A Prazo' ||
+    Boolean(sale.items?.[0]?.name?.startsWith('Recebimento A Prazo:'))
+  );
+}
+
+export function isOtherCashEntry(sale: Sale): boolean {
+  return (
+    sale.entryType === 'aporte' ||
+    sale.entryType === 'estorno' ||
+    sale.entryType === 'servico' ||
+    sale.entryType === 'outro'
+  );
+}
+
+export function isRealSaleEntry(sale: Sale): boolean {
+  if (sale.status === 'cancelada') return false;
+  if (isFiadoPaymentEntry(sale)) return false;
+  if (isOtherCashEntry(sale)) return false;
+  return true;
+}
+
+/** Entradas que realmente entraram no caixa (exclui vendas a prazo/fiado ainda não pagas e canceladas) */
+export function isCashInflowEntry(sale: Sale): boolean {
+  if (sale.status === 'cancelada') return false;
+  if (sale.paymentMethod === 'fiado') return false;
+  return true;
+}
+
+/** Vendas pagas na hora (Dinheiro, PIX ou Cartão — exclui fiado em aberto, recebimentos de fiado e outras entradas) */
+export function isPaidSaleEntry(sale: Sale): boolean {
+  return isRealSaleEntry(sale) && sale.paymentMethod !== 'fiado';
+}
+
 export function amortizeDebt(
   debtId: string,
   amount: number,
@@ -309,13 +347,27 @@ export function amortizeDebt(
   const debtsKey = `${getPrefix(userId)}_debts`;
   const debts = getDebts(userId);
   const debt = debts.find((d) => d.id === debtId);
-  if (!debt) return { debts };
+  if (!debt || debt.totalOwed <= 0 || amount <= 0) return { debts };
 
   const payAmount = Math.min(amount, debt.totalOwed);
-  debt.totalOwed = Math.max(0, debt.totalOwed - payAmount);
+  const nowMs = Date.now();
+  const nowIso = new Date(nowMs).toISOString();
+
+  // Proteção contra registro duplicado por duplo clique ou reenvio rápido (últimos 5 segundos)
+  const latestHistory = debt.history[0];
+  if (
+    latestHistory &&
+    latestHistory.type === 'pagamento' &&
+    Math.abs(latestHistory.amount - payAmount) < 0.01 &&
+    nowMs - new Date(latestHistory.date).getTime() < 5000
+  ) {
+    return { debts };
+  }
+
+  debt.totalOwed = Math.max(0, Number((debt.totalOwed - payAmount).toFixed(2)));
   debt.history.unshift({
-    id: `pay_${Date.now()}`,
-    date: new Date().toISOString(),
+    id: `pay_${nowMs}_${Math.random().toString(36).slice(2, 6)}`,
+    date: nowIso,
     type: 'pagamento',
     amount: payAmount,
     notes: notes || `Recebimento A Prazo (${paymentMethod.toUpperCase()})`,
@@ -323,12 +375,12 @@ export function amortizeDebt(
 
   localStorage.setItem(debtsKey, JSON.stringify(debts));
 
-  // Also record this received money as a Sale/Cash Entry for today
+  // Registra a entrada financeira no caixa do dia SEM duplicar faturamento de venda
   const saleCode = `#REC-${Math.floor(100 + Math.random() * 900)}`;
   const recoverySale: Sale = {
-    id: `rec_${Date.now()}`,
+    id: `rec_${nowMs}_${Math.random().toString(36).slice(2, 6)}`,
     code: saleCode,
-    date: new Date().toISOString(),
+    date: nowIso,
     items: [
       {
         name: `Recebimento A Prazo: ${debt.name}`,
@@ -340,11 +392,18 @@ export function amortizeDebt(
     ],
     totalAmount: payAmount,
     totalCost: 0,
-    paymentMethod: paymentMethod === 'dinheiro' ? 'dinheiro' : paymentMethod === 'pix' ? 'pix' : 'cartao_debito',
+    paymentMethod:
+      paymentMethod === 'dinheiro'
+        ? 'dinheiro'
+        : paymentMethod === 'pix'
+        ? 'pix'
+        : 'cartao_debito',
     customerName: debt.name,
     customerPhone: debt.phone,
     notes: notes || 'Recebimento de venda a prazo',
     status: 'concluida',
+    entryType: 'recebimento_fiado',
+    category: 'Recebimento A Prazo',
   };
 
   const updatedSales = getSales(userId);

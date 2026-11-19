@@ -17,8 +17,14 @@ import {
   AlertTriangle,
   Lock,
 } from 'lucide-react';
+import { collection, onSnapshot } from 'firebase/firestore';
+import { auth, db } from '../firebase';
 import { UserAccount, SubscriptionStatus } from '../types';
-import { getAllUsersFirestore, updateUserSubscriptionFirestore } from '../utils/firestoreService';
+import {
+  getAllUsersFirestore,
+  saveUserProfileFirestore,
+  updateUserSubscriptionFirestore,
+} from '../utils/firestoreService';
 import { getRegisteredUsers, saveRegisteredUsers } from '../utils/authStorage';
 import { formatDateOnlyBR } from '../utils/receipt';
 
@@ -28,12 +34,36 @@ interface AdminPanelModalProps {
   currentUserEmail?: string;
 }
 
+const VALID_FIRESTORE_ID_RE = /^[a-zA-Z0-9_-]{1,128}$/;
+
+function mergeUsersList(localUsers: UserAccount[], firestoreUsers: UserAccount[]): UserAccount[] {
+  const byEmailOrId = new Map<string, UserAccount>();
+
+  // Primeiro adiciona locais (chave por e-mail se existir, senão id)
+  localUsers.forEach((u) => {
+    const key = (u.email || '').trim().toLowerCase() || u.id;
+    byEmailOrId.set(key, u);
+  });
+
+  // Firestore sobrescreve e garante o UID oficial do Firebase
+  firestoreUsers.forEach((u) => {
+    const key = (u.email || '').trim().toLowerCase() || u.id;
+    byEmailOrId.set(key, u);
+  });
+
+  const list = Array.from(byEmailOrId.values());
+  list.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+  return list;
+}
+
 export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   isOpen,
   onClose,
   currentUserEmail,
 }) => {
   const [users, setUsers] = useState<UserAccount[]>([]);
+  const [cloudCount, setCloudCount] = useState<number>(0);
+  const [cloudWarning, setCloudWarning] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'trial' | 'blocked'>('all');
@@ -42,42 +72,127 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   const [updatingUserId, setUpdatingUserId] = useState<string | null>(null);
   const [confirmingBlockUserId, setConfirmingBlockUserId] = useState<string | null>(null);
 
+  const syncLocalUsersToCloudIfAdmin = async (
+    localUsers: UserAccount[],
+    firestoreUsers: UserAccount[]
+  ) => {
+    const fbEmail = auth.currentUser?.email?.toLowerCase();
+    if (fbEmail !== 'cosquinha66@gmail.com') return;
+
+    const existingIds = new Set(firestoreUsers.map((u) => u.id));
+    const existingEmails = new Set(
+      firestoreUsers.map((u) => (u.email || '').trim().toLowerCase()).filter(Boolean)
+    );
+
+    const missingInCloud = localUsers.filter((u) => {
+      const email = (u.email || '').trim().toLowerCase();
+      return (
+        VALID_FIRESTORE_ID_RE.test(u.id) &&
+        !existingIds.has(u.id) &&
+        (!email || !existingEmails.has(email))
+      );
+    });
+
+    for (const localUser of missingInCloud) {
+      try {
+        await saveUserProfileFirestore(localUser);
+      } catch (err) {
+        console.warn('Could not backfill local user to Firestore:', localUser.id, err);
+      }
+    }
+  };
+
   const loadUsers = async () => {
     setIsLoading(true);
+    setCloudWarning(null);
+    const localUsers = getRegisteredUsers();
+
+    if (!auth.currentUser) {
+      setCloudCount(0);
+      setUsers(mergeUsersList(localUsers, []));
+      setCloudWarning(
+        'Você entrou sem autenticação do Firebase nesta sessão. Para ver todos os usuários salvos na nuvem em qualquer aparelho, saia e clique em "Continuar com o Google" usando cosquinha66@gmail.com.'
+      );
+      setIsLoading(false);
+      return;
+    }
+
     try {
-      // 1. Fetch from Firestore
       const firestoreUsers = await getAllUsersFirestore();
-
-      // 2. Also check local users
-      const localUsers = getRegisteredUsers();
-
-      // Merge by ID / email, preferring firestore data
-      const mergedMap = new Map<string, UserAccount>();
-
-      localUsers.forEach((u) => {
-        mergedMap.set(u.id, u);
-      });
-
-      firestoreUsers.forEach((u) => {
-        mergedMap.set(u.id, u);
-      });
-
-      const list = Array.from(mergedMap.values());
-      // Sort newest first
-      list.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
-
-      setUsers(list);
+      setCloudCount(firestoreUsers.length);
+      setUsers(mergeUsersList(localUsers, firestoreUsers));
+      await syncLocalUsersToCloudIfAdmin(localUsers, firestoreUsers);
     } catch (err) {
       console.error('Failed to load users for admin panel', err);
+      setCloudCount(0);
+      setUsers(mergeUsersList(localUsers, []));
+      setCloudWarning(
+        'Não foi possível ler a coleção /users do Firebase com a conta atual. Entre com o Google (cosquinha66@gmail.com) para liberar a leitura em nuvem.'
+      );
     } finally {
       setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    if (isOpen) {
-      loadUsers();
+    if (!isOpen) return;
+
+    const localUsers = getRegisteredUsers();
+    if (!auth.currentUser) {
+      setCloudCount(0);
+      setUsers(mergeUsersList(localUsers, []));
+      setCloudWarning(
+        'Você entrou sem autenticação do Firebase nesta sessão. Para ver todos os usuários salvos na nuvem em qualquer aparelho, saia e clique em "Continuar com o Google" usando cosquinha66@gmail.com.'
+      );
+      return;
     }
+
+    setIsLoading(true);
+    setCloudWarning(null);
+
+    const unsubscribe = onSnapshot(
+      collection(db, 'users'),
+      (snap) => {
+        const firestoreUsers: UserAccount[] = [];
+        snap.forEach((d) => {
+          const data = d.data();
+          firestoreUsers.push({
+            id: d.id,
+            name: data.name || 'Sem nome',
+            email: data.email || '',
+            phone: data.phone || '',
+            businessName: data.businessName || '',
+            createdAt: data.createdAt || new Date().toISOString(),
+            trialEndsAt: data.trialEndsAt || '',
+            subscriptionStatus: (data.subscriptionStatus as SubscriptionStatus) || 'trial',
+            planPrice: data.planPrice || 15.97,
+            selectedPlan: data.selectedPlan,
+            stripeCustomerId: data.stripeCustomerId,
+            stripeSubscriptionId: data.stripeSubscriptionId,
+            subscriptionPaidAt: data.subscriptionPaidAt,
+            subscriptionExpiresAt: data.subscriptionExpiresAt,
+          });
+        });
+
+        const latestLocal = getRegisteredUsers();
+        setCloudCount(firestoreUsers.length);
+        setUsers(mergeUsersList(latestLocal, firestoreUsers));
+        setCloudWarning(null);
+        setIsLoading(false);
+        syncLocalUsersToCloudIfAdmin(latestLocal, firestoreUsers);
+      },
+      (err) => {
+        console.error('Realtime users listener error:', err);
+        setCloudCount(0);
+        setUsers(mergeUsersList(getRegisteredUsers(), []));
+        setCloudWarning(
+          'Permissão negada no Firebase Firestore. Confirme que está autenticado com Google usando cosquinha66@gmail.com.'
+        );
+        setIsLoading(false);
+      }
+    );
+
+    return () => unsubscribe();
   }, [isOpen]);
 
   const handleCopy = (text: string, id: string) => {
@@ -234,6 +349,19 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
             >
               ✕
             </button>
+          </div>
+        )}
+
+        {/* Firebase Auth / Cloud Warning Banner */}
+        {cloudWarning && (
+          <div className="bg-amber-50 border-b border-amber-200 text-amber-950 text-xs px-4 py-3 flex items-start gap-2.5 shrink-0">
+            <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+            <div className="leading-relaxed">
+              <strong className="font-extrabold block text-amber-900">
+                Sincronização em Nuvem Firebase
+              </strong>
+              <span>{cloudWarning}</span>
+            </div>
           </div>
         )}
 
@@ -549,10 +677,15 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="shrink-0 bg-slate-50 border-t border-slate-200 px-5 py-3 flex items-center justify-between">
-          <span className="text-[11px] text-slate-500">
-            Logado como: <strong className="text-slate-800">{currentUserEmail || 'cosquinha66@gmail.com'}</strong>
-          </span>
+        <div className="shrink-0 bg-slate-50 border-t border-slate-200 px-5 py-3 flex items-center justify-between gap-2">
+          <div className="text-[11px] text-slate-500 flex flex-wrap items-center gap-x-3 gap-y-1">
+            <span>
+              Logado como: <strong className="text-slate-800">{currentUserEmail || 'cosquinha66@gmail.com'}</strong>
+            </span>
+            <span className="text-emerald-700 font-semibold">
+              {cloudCount} no Firebase
+            </span>
+          </div>
           <button
             type="button"
             onClick={onClose}

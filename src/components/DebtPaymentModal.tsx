@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { X, Check, Banknote, QrCode, CreditCard, Share2, Sparkles } from 'lucide-react';
 import { CustomerDebt, BusinessSettings } from '../types';
 import { formatCurrency, formatDateOnlyBR } from '../utils/receipt';
@@ -29,6 +29,8 @@ export const DebtPaymentModal: React.FC<DebtPaymentModalProps> = ({
   const [payAmountStr, setPayAmountStr] = useState<string>('');
   const [paymentMethod, setPaymentMethod] = useState<'dinheiro' | 'pix' | 'cartao'>('pix');
   const [notes, setNotes] = useState<string>('');
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const submittingRef = useRef<boolean>(false);
   const [justPaidReceipt, setJustPaidReceipt] = useState<{
     amount: number;
     remaining: number;
@@ -36,11 +38,23 @@ export const DebtPaymentModal: React.FC<DebtPaymentModalProps> = ({
     phone: string;
   } | null>(null);
 
+  useEffect(() => {
+    if (isOpen) {
+      setPayAmountStr('');
+      setPaymentMethod('pix');
+      setNotes('');
+      setJustPaidReceipt(null);
+      setIsSubmitting(false);
+      submittingRef.current = false;
+    }
+  }, [isOpen, debt?.id]);
+
   if (!isOpen || !debt) return null;
 
   // Initialize with full amount if empty
   const currentTotal = debt.totalOwed;
-  const payVal = payAmountStr ? parseFloat(payAmountStr.replace(',', '.')) || 0 : currentTotal;
+  const rawParsed = payAmountStr ? parseFloat(payAmountStr.replace(',', '.')) || 0 : currentTotal;
+  const payVal = Math.min(rawParsed, currentTotal);
 
   const handlePayFull = () => {
     if (soundEnabled) playTapBeep();
@@ -54,19 +68,23 @@ export const DebtPaymentModal: React.FC<DebtPaymentModalProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (payVal <= 0) return;
+    if (submittingRef.current || isSubmitting || justPaidReceipt) return;
+    if (payVal <= 0 || currentTotal <= 0) return;
+
+    submittingRef.current = true;
+    setIsSubmitting(true);
 
     if (soundEnabled) {
       playSaleChime();
     }
 
-    const remaining = Math.max(0, currentTotal - payVal);
+    const remaining = Math.max(0, Number((currentTotal - payVal).toFixed(2)));
 
     onConfirmPayment(
       debt.id,
       payVal,
       paymentMethod,
-      notes || `Pagamento A Prazo (${paymentMethod.toUpperCase()})`
+      notes.trim() || `Pagamento A Prazo (${paymentMethod.toUpperCase()})`
     );
 
     setJustPaidReceipt({
@@ -75,6 +93,7 @@ export const DebtPaymentModal: React.FC<DebtPaymentModalProps> = ({
       debtName: debt.name,
       phone: debt.phone,
     });
+    setIsSubmitting(false);
   };
 
   const handleShareReceiptWhatsApp = () => {
@@ -280,11 +299,15 @@ export const DebtPaymentModal: React.FC<DebtPaymentModalProps> = ({
             {/* Submit */}
             <button
               type="submit"
-              disabled={payVal <= 0}
+              disabled={payVal <= 0 || isSubmitting}
               className="w-full min-h-[50px] rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-sm flex items-center justify-center gap-2 shadow-xs transition-colors touch-press disabled:opacity-50"
             >
               <Check className="w-5 h-5 stroke-[2.5]" />
-              <span>CONFIRMAR RECEBIMENTO ({formatCurrency(payVal)})</span>
+              <span>
+                {isSubmitting
+                  ? 'REGISTRANDO...'
+                  : `CONFIRMAR RECEBIMENTO (${formatCurrency(payVal)})`}
+              </span>
             </button>
           </form>
         )}

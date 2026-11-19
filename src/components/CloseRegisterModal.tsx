@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { X, Check, Share2, AlertTriangle, ShieldCheck, Wallet } from 'lucide-react';
 import { DailyRegister, BusinessSettings, Sale, Expense } from '../types';
 import { formatCurrency, generateWhatsAppCashSummary } from '../utils/receipt';
+import { isRealSaleEntry, isFiadoPaymentEntry, isCashInflowEntry } from '../utils/storage';
 
 interface CloseRegisterModalProps {
   isOpen: boolean;
@@ -30,14 +31,25 @@ export const CloseRegisterModal: React.FC<CloseRegisterModalProps> = ({
 
   if (!isOpen) return null;
 
-  // Filter completed sales for today
+  // Filter completed inflows for today (cash/PIX/card reconciliation includes fiado payments & aportes)
   const todaySales = sales.filter(
     (s) => s.status === 'concluida' && s.date.startsWith(dateStr)
   );
+  const todayCashInflows = todaySales.filter(isCashInflowEntry);
+  const todayPaidSales = todayCashInflows.filter(isRealSaleEntry);
+  const todayFiadoReceived = todayCashInflows
+    .filter(isFiadoPaymentEntry)
+    .reduce((acc, s) => acc + s.totalAmount, 0);
+  const todayOtherInflows = todayCashInflows
+    .filter((s) => !isRealSaleEntry(s) && !isFiadoPaymentEntry(s))
+    .reduce((acc, s) => acc + s.totalAmount, 0);
 
   const todayExpenses = expenses.filter((e) => e.date.startsWith(dateStr));
 
-  const totalSales = todaySales.reduce((acc, s) => acc + s.totalAmount, 0);
+  // Apenas o que de fato entrou no caixa (não soma fiado em aberto)
+  const totalSales = todayCashInflows.reduce((acc, s) => acc + s.totalAmount, 0);
+  const totalPaidSalesAmount = todayPaidSales.reduce((acc, s) => acc + s.totalAmount, 0);
+  const totalExtraInflows = todayFiadoReceived + todayOtherInflows;
   const totalExpenses = todayExpenses.reduce((acc, e) => acc + e.amount, 0);
 
   const byMethod: Record<string, number> = {};
@@ -46,6 +58,7 @@ export const CloseRegisterModal: React.FC<CloseRegisterModalProps> = ({
   });
 
   const cashSales = byMethod['dinheiro'] || 0;
+  const todayFiadoSalesAmount = byMethod['fiado'] || 0;
   const cashExpenses = todayExpenses
     .filter((e) => e.paymentMethod === 'dinheiro')
     .reduce((acc, e) => acc + e.amount, 0);
@@ -61,7 +74,7 @@ export const CloseRegisterModal: React.FC<CloseRegisterModalProps> = ({
       dateStr,
       totalSales,
       totalExpenses,
-      todaySales.length,
+      todayCashInflows.length,
       byMethod,
       settings
     );
@@ -144,7 +157,7 @@ export const CloseRegisterModal: React.FC<CloseRegisterModalProps> = ({
                   </span>
                 </div>
                 <div className="flex items-center justify-between text-emerald-700 font-medium">
-                  <span>+ Vendas em Dinheiro:</span>
+                  <span>+ Entradas em Dinheiro:</span>
                   <span className="font-mono-numbers font-bold">
                     +{formatCurrency(cashSales)}
                   </span>
@@ -202,15 +215,27 @@ export const CloseRegisterModal: React.FC<CloseRegisterModalProps> = ({
             {/* General daily overview */}
             <div className="bg-slate-50 rounded-xl p-3 border border-slate-200 text-xs space-y-1.5">
               <div className="flex items-center justify-between text-slate-600">
-                <span>Vendas Totais do Dia:</span>
-                <span className="font-mono-numbers text-slate-900 font-bold">{formatCurrency(totalSales)}</span>
+                <span>Vendas Pagas no Dia:</span>
+                <span className="font-mono-numbers text-slate-900 font-bold">{formatCurrency(totalPaidSalesAmount)}</span>
               </div>
+              {totalExtraInflows > 0 && (
+                <div className="flex items-center justify-between text-teal-700">
+                  <span>Receb. A Prazo / Outras Entradas:</span>
+                  <span className="font-mono-numbers font-bold">+{formatCurrency(totalExtraInflows)}</span>
+                </div>
+              )}
+              {todayFiadoSalesAmount > 0 && (
+                <div className="flex items-center justify-between text-amber-700">
+                  <span>Vendido A Prazo (a receber):</span>
+                  <span className="font-mono-numbers font-bold">{formatCurrency(todayFiadoSalesAmount)}</span>
+                </div>
+              )}
               <div className="flex items-center justify-between text-slate-600">
                 <span>Despesas Totais:</span>
                 <span className="font-mono-numbers text-rose-700 font-bold">-{formatCurrency(totalExpenses)}</span>
               </div>
               <div className="flex items-center justify-between font-bold text-emerald-700 pt-1 border-t border-slate-200">
-                <span>Lucro do Dia:</span>
+                <span>Saldo Líquido (Recebido - Despesas):</span>
                 <span className="font-mono-numbers text-sm font-black">{formatCurrency(totalSales - totalExpenses)}</span>
               </div>
             </div>

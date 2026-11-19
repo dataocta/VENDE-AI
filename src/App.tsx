@@ -42,6 +42,7 @@ import {
   saveDailyRegister,
   getSettings,
   saveSettings,
+  isCashInflowEntry,
   exportAllDataJSON,
   importAllDataJSON,
   resetUserData,
@@ -52,6 +53,8 @@ import {
   upsertLocalUser,
   logoutUser,
   getTrialInfo,
+  readPendingProfile,
+  savePendingProfile,
 } from './utils/authStorage';
 import { playSaleChime } from './utils/audio';
 import {
@@ -128,21 +131,29 @@ export default function App() {
     // 1. Connection check on boot as mandated by Firebase skill
     testFirestoreConnection();
 
-    // 2. Listen to real Firebase auth state (Google login)
+    // 2. Listen to real Firebase auth state (Google & Email/Password login)
     const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
       if (fbUser) {
-        // User is logged into Firebase
+        const pendingProfile = readPendingProfile();
+        const pendingStripe = readPendingStripe();
         let user = await getUserProfileFirestore(fbUser.uid);
+
         if (!user) {
           const now = new Date();
           const sevenDaysLater = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
-          const pendingStripe = readPendingStripe();
+          const resolvedName =
+            pendingProfile?.name ||
+            fbUser.displayName ||
+            pendingStripe?.customerName ||
+            (fbUser.email ? fbUser.email.split('@')[0] : 'Vendedor');
+
           user = {
             id: fbUser.uid,
-            name: fbUser.displayName || pendingStripe?.customerName || 'Vendedor',
-            email: fbUser.email || pendingStripe?.customerEmail || '',
-            phone: fbUser.phoneNumber || '',
-            businessName: `Vendas de ${(fbUser.displayName || 'Rua').split(' ')[0]}`,
+            name: resolvedName,
+            email: (fbUser.email || pendingProfile?.email || pendingStripe?.customerEmail || '').toLowerCase(),
+            phone: pendingProfile?.phone || fbUser.phoneNumber || '',
+            businessName:
+              pendingProfile?.businessName || `Vendas de ${(resolvedName || 'Rua').split(' ')[0]}`,
             createdAt: now.toISOString(),
             trialEndsAt:
               pendingStripe?.subscriptionStatus === 'trial' && pendingStripe.currentPeriodEnd
@@ -157,11 +168,54 @@ export default function App() {
             subscriptionExpiresAt: pendingStripe?.currentPeriodEnd,
           };
           await saveUserProfileFirestore(user);
+        } else {
+          let needsSync = false;
+          const merged = { ...user };
+          if (!merged.name && (pendingProfile?.name || fbUser.displayName)) {
+            merged.name = pendingProfile?.name || fbUser.displayName || 'Vendedor';
+            needsSync = true;
+          }
+          if (!merged.phone && (pendingProfile?.phone || fbUser.phoneNumber)) {
+            merged.phone = pendingProfile?.phone || fbUser.phoneNumber || '';
+            needsSync = true;
+          }
+          if (!merged.email && fbUser.email) {
+            merged.email = fbUser.email.toLowerCase();
+            needsSync = true;
+          }
           if (pendingStripe) {
-            savePendingStripe(null);
-            setPendingStripeCheckout(null);
+            merged.subscriptionStatus = pendingStripe.subscriptionStatus || 'active';
+            merged.stripeCustomerId = pendingStripe.stripeCustomerId || merged.stripeCustomerId;
+            merged.stripeSubscriptionId =
+              pendingStripe.stripeSubscriptionId || merged.stripeSubscriptionId;
+            merged.selectedPlan = pendingStripe.plan || merged.selectedPlan;
+            merged.planPrice = pendingStripe.planPrice || merged.planPrice;
+            merged.subscriptionPaidAt = merged.subscriptionPaidAt || new Date().toISOString();
+            merged.subscriptionExpiresAt =
+              pendingStripe.currentPeriodEnd || merged.subscriptionExpiresAt;
+            if (
+              pendingStripe.subscriptionStatus === 'trial' &&
+              pendingStripe.currentPeriodEnd
+            ) {
+              merged.trialEndsAt = pendingStripe.currentPeriodEnd;
+            }
+            needsSync = true;
+          }
+          if (needsSync) {
+            user = merged;
+            await saveUserProfileFirestore(user);
           }
         }
+
+        if (pendingProfile) {
+          savePendingProfile(null);
+        }
+        if (pendingStripe) {
+          savePendingStripe(null);
+          setPendingStripeCheckout(null);
+        }
+
+        upsertLocalUser(user);
         setLocalCurrentUser(user);
         setCurrentUser(user);
         await syncDataWithFirestore(user);
@@ -459,19 +513,26 @@ export default function App() {
     setCurrentUser(user);
     setLocalCurrentUser(user);
     // Sync user business name to settings for this specific user
+    const existingSettings = getSettings(user.id);
     const updatedSettings: BusinessSettings = {
-      ...getSettings(user.id),
-      sellerName: user.name,
-      businessName: user.businessName,
-      phone: user.phone,
-      pixKey: user.phone,
+      ...existingSettings,
+      sellerName: user.name || existingSettings.sellerName,
+      businessName: user.businessName || existingSettings.businessName,
+      phone: user.phone || existingSettings.phone,
+      pixKey: existingSettings.pixKey || user.phone || '',
     };
     saveSettings(updatedSettings, user.id);
     setSettings(updatedSettings);
 
-    // Save profile and settings to Firestore cloud
-    saveUserProfileFirestore(user).catch(() => {});
-    saveSettingsFirestore(updatedSettings, user.id).catch(() => {});
+    // Save profile and settings to Firestore cloud when signed into Firebase
+    if (auth.currentUser && auth.currentUser.uid === user.id) {
+      saveUserProfileFirestore(user).catch((err) =>
+        console.error('Failed saving user profile on auth success:', err)
+      );
+      saveSettingsFirestore(updatedSettings, user.id).catch((err) =>
+        console.error('Failed saving settings on auth success:', err)
+      );
+    }
 
     // Sync all existing data with Firestore
     await syncDataWithFirestore(user);
@@ -586,11 +647,12 @@ export default function App() {
     setSales(getSales(uid));
     setCustomers(getCustomers(uid));
 
-    if (uid) {
+    if (uid && res.sale) {
       const updatedDebt = res.debts.find((d) => d.id === debtId);
       if (updatedDebt) {
         saveDebtFirestore(updatedDebt, uid).catch(console.error);
       }
+      saveSaleFirestore(res.sale, uid).catch(console.error);
     }
   };
 
@@ -850,8 +912,8 @@ export default function App() {
     );
   }
 
-  // Calculations for header and bottom bar
-  const todaySales = sales.filter((s) => s.status === 'concluida' && s.date.startsWith(todayStr));
+  // Calculations for header and bottom bar (exclui fiado em aberto)
+  const todaySales = sales.filter((s) => isCashInflowEntry(s) && s.date.startsWith(todayStr));
   const todaySalesTotal = todaySales.reduce((acc, s) => acc + s.totalAmount, 0);
   const activeDebtsCount = debts.filter((d) => d.totalOwed > 0).length;
 
@@ -881,11 +943,13 @@ export default function App() {
             sales={sales}
             expenses={expenses}
             customers={customers}
+            debts={debts}
             settings={settings}
             onCompleteSale={handleCompleteSale}
             onCancelSale={handleCancelSale}
             onOpenNumpadSale={() => setIsNumpadOpen(true)}
             onOpenNewExpense={() => setIsExpenseOpen(true)}
+            onOpenPaymentModal={(debt) => setPayingDebt(debt)}
             onNavigateToTab={(tab) => setActiveTab(tab)}
             onUpdateSettings={handleUpdateSettings}
           />
@@ -918,11 +982,14 @@ export default function App() {
           <CashView
             sales={sales}
             expenses={expenses}
+            debts={debts}
             register={register}
             settings={settings}
             dateStr={todayStr}
             onUpdateOpeningBalance={handleUpdateOpeningBalance}
             onOpenCloseRegister={() => setIsCloseRegisterOpen(true)}
+            onOpenPaymentModal={(debt) => setPayingDebt(debt)}
+            onNavigateToCustomers={() => setActiveTab('customers')}
             onUpdateSale={handleUpdateSale}
             onDeleteSale={handleDeleteSale}
             onUpdateExpense={handleUpdateExpense}

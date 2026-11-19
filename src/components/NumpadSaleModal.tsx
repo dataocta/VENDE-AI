@@ -20,6 +20,9 @@ import {
   UserPlus,
   Keyboard,
   ArrowRight,
+  ArrowLeft,
+  AlertCircle,
+  Wallet,
 } from 'lucide-react';
 import { PaymentMethod, Sale, Customer, Product } from '../types';
 import { formatCurrency } from '../utils/receipt';
@@ -48,6 +51,10 @@ export const NumpadSaleModal: React.FC<NumpadSaleModalProps> = ({
   products = [],
   onSaveCustomer,
 }) => {
+  // Two-step entry flow: 'choose' (Venda vs Outra Entrada) or 'entry'
+  const [modalStep, setModalStep] = useState<'choose' | 'entry'>('choose');
+  const [entryFlowMode, setEntryFlowMode] = useState<'venda' | 'other'>('venda');
+
   // Mode selection: 'numpad' (default) or 'catalog'
   const [saleMode, setSaleMode] = useState<'numpad' | 'catalog'>('numpad');
 
@@ -68,6 +75,7 @@ export const NumpadSaleModal: React.FC<NumpadSaleModalProps> = ({
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('pix');
   const [receivedCents, setReceivedCents] = useState<number>(0);
   const [description, setDescription] = useState<string>('');
+  const [formError, setFormError] = useState<string | null>(null);
 
   // Customer state & modal selector
   const [customerName, setCustomerName] = useState<string>(defaultCustomerName || '');
@@ -83,9 +91,6 @@ export const NumpadSaleModal: React.FC<NumpadSaleModalProps> = ({
   // Description / Extra info expandable toggle
   const [showExtraOptions, setShowExtraOptions] = useState(false);
 
-  // Focusable invisible input for PC keyboard input
-  const amountInputRef = useRef<HTMLInputElement>(null);
-
   // Entry category options
   const entryCategories: {
     id: EntryCategoryType;
@@ -95,11 +100,13 @@ export const NumpadSaleModal: React.FC<NumpadSaleModalProps> = ({
     activeBg: string;
   }[] = [
     { id: 'venda', label: 'Venda', icon: ShoppingBag, accentColor: 'text-emerald-700', activeBg: 'bg-emerald-600 text-white' },
-    { id: 'estorno', label: 'Estorno', icon: RotateCcw, accentColor: 'text-purple-700', activeBg: 'bg-purple-600 text-white' },
-    { id: 'servico', label: 'Serviço', icon: Wrench, accentColor: 'text-blue-700', activeBg: 'bg-blue-600 text-white' },
     { id: 'aporte', label: 'Aporte de Caixa', icon: Banknote, accentColor: 'text-amber-700', activeBg: 'bg-amber-600 text-white' },
+    { id: 'servico', label: 'Serviço', icon: Wrench, accentColor: 'text-blue-700', activeBg: 'bg-blue-600 text-white' },
+    { id: 'estorno', label: 'Estorno', icon: RotateCcw, accentColor: 'text-purple-700', activeBg: 'bg-purple-600 text-white' },
     { id: 'outro', label: 'Outra Entrada', icon: Tag, accentColor: 'text-slate-700', activeBg: 'bg-slate-700 text-white' },
   ];
+
+  const nonSaleCategories = entryCategories.filter((c) => c.id !== 'venda');
 
   // Categories from products
   const productCategories = useMemo(() => {
@@ -158,19 +165,54 @@ export const NumpadSaleModal: React.FC<NumpadSaleModalProps> = ({
 
   // Reset all state when closed
   const resetAllState = () => {
+    setModalStep('choose');
+    setEntryFlowMode('venda');
+    setSaleMode('numpad');
     setCents(0);
     setReceivedCents(0);
     setSelectedQuickProduct(null);
     setCatalogCart({});
     setDescription('');
+    setFormError(null);
     setCustomerName('');
     setCustomerPhone('');
     setCustomerId(undefined);
     setEntryCategory('venda');
     setCustomCategoryName('');
+    setPaymentMethod('pix');
     setIsCustomerSelectorOpen(false);
     setIsCreatingNewCustomer(false);
     setShowExtraOptions(false);
+  };
+
+  useEffect(() => {
+    if (isOpen) {
+      setModalStep('choose');
+      setFormError(null);
+    }
+  }, [isOpen]);
+
+  const handleChooseSaleFlow = () => {
+    if (soundEnabled) playTapBeep();
+    setEntryFlowMode('venda');
+    setEntryCategory('venda');
+    setSaleMode('numpad');
+    setFormError(null);
+    setModalStep('entry');
+  };
+
+  const handleChooseOtherEntryFlow = (cat: EntryCategoryType = 'aporte') => {
+    if (soundEnabled) playTapBeep();
+    setEntryFlowMode('other');
+    setEntryCategory(cat);
+    setSaleMode('numpad');
+    setSelectedQuickProduct(null);
+    setCatalogCart({});
+    if (paymentMethod === 'fiado') {
+      setPaymentMethod('dinheiro');
+    }
+    setFormError(null);
+    setModalStep('entry');
   };
 
   // Numpad key handlers
@@ -296,6 +338,9 @@ export const NumpadSaleModal: React.FC<NumpadSaleModalProps> = ({
         return;
       }
 
+      // Only capture numpad digits when in 'entry' step
+      if (modalStep !== 'entry') return;
+
       // If user is typing in a text field, do not capture numpad digits
       if (isInput) return;
 
@@ -320,6 +365,7 @@ export const NumpadSaleModal: React.FC<NumpadSaleModalProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [
     isOpen,
+    modalStep,
     cents,
     totalAmount,
     paymentMethod,
@@ -337,10 +383,11 @@ export const NumpadSaleModal: React.FC<NumpadSaleModalProps> = ({
 
   // Submit sale function
   const handleSubmitDirect = () => {
+    setFormError(null);
     if (totalAmount <= 0) return;
 
     if (paymentMethod === 'fiado' && !customerName.trim()) {
-      alert('Para venda a prazo, selecione ou informe o cliente!');
+      setFormError('Para venda a prazo, selecione ou informe o cliente!');
       return;
     }
 
@@ -402,7 +449,7 @@ export const NumpadSaleModal: React.FC<NumpadSaleModalProps> = ({
 
       saleItems = [
         {
-          productId: selectedQuickProduct ? selectedQuickProduct.id : undefined,
+          ...(selectedQuickProduct ? { productId: selectedQuickProduct.id } : {}),
           name: itemName,
           quantity: 1,
           unitPrice: totalAmount,
@@ -458,18 +505,43 @@ export const NumpadSaleModal: React.FC<NumpadSaleModalProps> = ({
         
         {/* Header Bar */}
         <div className="shrink-0 bg-white px-5 pt-3.5 pb-2.5 border-b border-slate-100 flex items-center justify-between z-10">
-          <div>
-            <h2 className="text-base font-extrabold text-slate-900 flex items-center gap-1.5">
-              <span>Registrar Entrada</span>
-              {entryCategory !== 'venda' && (
-                <span className="text-xs px-2 py-0.5 rounded-md font-bold uppercase bg-purple-100 text-purple-800 border border-purple-200">
-                  {entryCategory}
+          <div className="flex items-center gap-2.5 min-w-0">
+            {modalStep === 'entry' && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (soundEnabled) playTapBeep();
+                  setFormError(null);
+                  setModalStep('choose');
+                }}
+                title="Voltar para escolher tipo de entrada"
+                className="px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold flex items-center gap-1 shrink-0 transition-colors"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                <span>Voltar</span>
+              </button>
+            )}
+            <div className="min-w-0">
+              <h2 className="text-base font-extrabold text-slate-900 flex items-center gap-1.5 truncate">
+                <span>
+                  {modalStep === 'choose'
+                    ? 'Registrar Entrada'
+                    : entryFlowMode === 'venda'
+                    ? 'Registrar Venda'
+                    : 'Outra Entrada de Dinheiro'}
                 </span>
-              )}
-            </h2>
-            <p className="text-[11px] text-slate-500">
-              Digite o valor no teclado numérico ou no teclado do PC
-            </p>
+                {modalStep === 'entry' && entryFlowMode === 'other' && (
+                  <span className="text-[10px] px-2 py-0.5 rounded-md font-bold uppercase bg-amber-100 text-amber-800 border border-amber-200 shrink-0">
+                    Não é venda
+                  </span>
+                )}
+              </h2>
+              <p className="text-[11px] text-slate-500 truncate">
+                {modalStep === 'choose'
+                  ? 'Escolha se entrou uma venda ou outro tipo de dinheiro no caixa'
+                  : 'Digite o valor no teclado numérico ou no teclado do PC'}
+              </p>
+            </div>
           </div>
           <button
             type="button"
@@ -477,98 +549,169 @@ export const NumpadSaleModal: React.FC<NumpadSaleModalProps> = ({
               resetAllState();
               onClose();
             }}
-            className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center transition-colors"
+            className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center transition-colors shrink-0"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        {/* 1. Categorias de Entrada (Venda, Estorno, Serviço, Aporte, Outro) */}
-        <div className="shrink-0 bg-slate-50 px-4 py-2 border-b border-slate-200">
-          <div className="flex items-center gap-1 overflow-x-auto no-scrollbar py-0.5">
-            {entryCategories.map((cat) => {
-              const Icon = cat.icon;
-              const isSelected = entryCategory === cat.id;
+        {modalStep === 'choose' ? (
+          <div className="p-5 space-y-3.5 overflow-y-auto overscroll-contain pb-safe">
+            {/* Opção 1: Registrar Venda */}
+            <button
+              type="button"
+              onClick={handleChooseSaleFlow}
+              className="w-full text-left p-4 rounded-2xl bg-emerald-50/80 hover:bg-emerald-100/70 border-2 border-emerald-300 hover:border-emerald-500 transition-all shadow-xs flex items-center justify-between gap-3 group touch-press"
+            >
+              <div className="flex items-start gap-3 min-w-0">
+                <div className="w-11 h-11 rounded-2xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                  <ShoppingBag className="w-5 h-5" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-sm font-black text-emerald-950">
+                    Registrar Venda
+                  </div>
+                  <p className="text-xs text-emerald-800/80 leading-snug mt-0.5">
+                    Venda de produtos do catálogo ou valor avulso no Pix, Dinheiro, Cartão ou A Prazo.
+                  </p>
+                </div>
+              </div>
+              <ArrowRight className="w-5 h-5 text-emerald-700 shrink-0 group-hover:translate-x-0.5 transition-transform" />
+            </button>
 
-              return (
-                <button
-                  key={cat.id}
-                  type="button"
-                  onClick={() => {
-                    if (soundEnabled) playTapBeep();
-                    setEntryCategory(cat.id);
-                  }}
-                  className={`px-2.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shrink-0 ${
-                    isSelected
-                      ? cat.activeBg + ' shadow-xs scale-102'
-                      : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-100'
-                  }`}
-                >
-                  <Icon className="w-3.5 h-3.5" />
-                  <span>{cat.label}</span>
-                </button>
-              );
-            })}
-          </div>
+            {/* Opção 2: Outra Entrada de Dinheiro (Não é Venda) */}
+            <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
+              <button
+                type="button"
+                onClick={() => handleChooseOtherEntryFlow('aporte')}
+                className="w-full text-left flex items-center justify-between gap-3 group touch-press"
+              >
+                <div className="flex items-start gap-3 min-w-0">
+                  <div className="w-11 h-11 rounded-2xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-xs">
+                    <Wallet className="w-5 h-5" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-sm font-black text-slate-900">
+                      Outra Entrada de Dinheiro (Não é Venda)
+                    </div>
+                    <p className="text-xs text-slate-600 leading-snug mt-0.5">
+                      Dinheiro que entrou no caixa sem ser venda: troco inicial/aporte, serviço, reembolso ou entrada avulsa.
+                    </p>
+                  </div>
+                </div>
+                <ArrowRight className="w-5 h-5 text-slate-500 shrink-0 group-hover:translate-x-0.5 transition-transform" />
+              </button>
 
-          {/* If custom category picked */}
-          {entryCategory === 'outro' && (
-            <div className="pt-2">
-              <input
-                type="text"
-                placeholder="Qual o tipo de entrada? (ex: Aluguel, Reembolso, Frete)..."
-                value={customCategoryName}
-                onChange={(e) => setCustomCategoryName(e.target.value)}
-                className="w-full px-3 py-1.5 rounded-xl bg-white border border-slate-300 text-slate-900 text-xs focus:outline-none focus:border-slate-500 font-medium"
-              />
+              {/* Atalhos diretos para o tipo de entrada */}
+              <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-200/80">
+                {nonSaleCategories.map((cat) => {
+                  const Icon = cat.icon;
+                  return (
+                    <button
+                      key={cat.id}
+                      type="button"
+                      onClick={() => handleChooseOtherEntryFlow(cat.id)}
+                      className="px-3 py-2 rounded-xl bg-white hover:bg-slate-100 border border-slate-200 text-slate-800 text-xs font-bold flex items-center gap-2 transition-colors touch-press"
+                    >
+                      <Icon className={`w-3.5 h-3.5 shrink-0 ${cat.accentColor}`} />
+                      <span className="truncate">{cat.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-          )}
-        </div>
-
-        {/* Mode Switcher Tabs (Digitar Valor vs Catálogo) */}
-        <div className="shrink-0 bg-white px-4 pt-2 pb-1">
-          <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-100 rounded-2xl">
-            <button
-              type="button"
-              onClick={() => {
-                if (soundEnabled) playTapBeep();
-                setSaleMode('numpad');
-              }}
-              className={`py-1.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${
-                saleMode === 'numpad'
-                  ? 'bg-white text-emerald-800 shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <Calculator className="w-3.5 h-3.5" />
-              <span>Teclado Numérico</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                if (soundEnabled) playTapBeep();
-                setSaleMode('catalog');
-              }}
-              className={`py-1.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all relative ${
-                saleMode === 'catalog'
-                  ? 'bg-white text-emerald-800 shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <ShoppingBag className="w-3.5 h-3.5" />
-              <span>Itens Cadastrados ({products.length})</span>
-              {catalogItemsCount > 0 && (
-                <span className="w-4 h-4 rounded-full bg-emerald-600 text-white text-[10px] font-black flex items-center justify-center ml-0.5">
-                  {catalogItemsCount}
-                </span>
-              )}
-            </button>
           </div>
-        </div>
+        ) : (
+          <>
+            {/* 1. Categorias quando estiver em Outra Entrada */}
+            {entryFlowMode === 'other' && (
+              <div className="shrink-0 bg-slate-50 px-4 py-2 border-b border-slate-200">
+                <div className="flex items-center gap-1 overflow-x-auto no-scrollbar py-0.5">
+                  {nonSaleCategories.map((cat) => {
+                    const Icon = cat.icon;
+                    const isSelected = entryCategory === cat.id;
 
-        {/* Scrollable Content Area */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-3.5 overscroll-contain">
+                    return (
+                      <button
+                        key={cat.id}
+                        type="button"
+                        onClick={() => {
+                          if (soundEnabled) playTapBeep();
+                          setEntryCategory(cat.id);
+                        }}
+                        className={`px-2.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shrink-0 ${
+                          isSelected
+                            ? cat.activeBg + ' shadow-xs scale-102'
+                            : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-100'
+                        }`}
+                      >
+                        <Icon className="w-3.5 h-3.5" />
+                        <span>{cat.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {entryCategory === 'outro' && (
+                  <div className="pt-2">
+                    <input
+                      type="text"
+                      placeholder="Qual o tipo de entrada? (ex: Aluguel, Reembolso, Frete)..."
+                      value={customCategoryName}
+                      onChange={(e) => setCustomCategoryName(e.target.value)}
+                      className="w-full px-3 py-1.5 rounded-xl bg-white border border-slate-300 text-slate-900 text-xs focus:outline-none focus:border-slate-500 font-medium"
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Mode Switcher Tabs (Digitar Valor vs Catálogo) - apenas para Venda */}
+            {entryFlowMode === 'venda' && (
+              <div className="shrink-0 bg-white px-4 pt-2 pb-1">
+                <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-100 rounded-2xl">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (soundEnabled) playTapBeep();
+                      setSaleMode('numpad');
+                    }}
+                    className={`py-1.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${
+                      saleMode === 'numpad'
+                        ? 'bg-white text-emerald-800 shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    <Calculator className="w-3.5 h-3.5" />
+                    <span>Teclado Numérico</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (soundEnabled) playTapBeep();
+                      setSaleMode('catalog');
+                    }}
+                    className={`py-1.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all relative ${
+                      saleMode === 'catalog'
+                        ? 'bg-white text-emerald-800 shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    <ShoppingBag className="w-3.5 h-3.5" />
+                    <span>Itens Cadastrados ({products.length})</span>
+                    {catalogItemsCount > 0 && (
+                      <span className="w-4 h-4 rounded-full bg-emerald-600 text-white text-[10px] font-black flex items-center justify-center ml-0.5">
+                        {catalogItemsCount}
+                      </span>
+                    )}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Scrollable Content Area */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-3.5 overscroll-contain">
           
           {/* ==================================================== */}
           {/* MODE 1: NUMPAD (IMMEDIATE NUMERIC KEYPAD ON TOP)     */}
@@ -642,9 +785,9 @@ export const NumpadSaleModal: React.FC<NumpadSaleModalProps> = ({
                 })}
               </div>
 
-              {/* Collapsible: Vincular produto rápido ou descrição */}
+              {/* Collapsible: Vincular produto rápido ou descrição (sempre visível em Outra Entrada) */}
               <div className="pt-1">
-                {!showExtraOptions ? (
+                {entryFlowMode === 'venda' && !showExtraOptions ? (
                   <button
                     type="button"
                     onClick={() => setShowExtraOptions(true)}
@@ -656,19 +799,29 @@ export const NumpadSaleModal: React.FC<NumpadSaleModalProps> = ({
                 ) : (
                   <div className="p-3 bg-slate-50 border border-slate-200 rounded-2xl space-y-2 animate-in fade-in duration-150">
                     <div className="flex items-center justify-between text-xs font-semibold text-slate-700">
-                      <span>Descrição / Produto Específico:</span>
-                      <button
-                        type="button"
-                        onClick={() => setShowExtraOptions(false)}
-                        className="text-slate-400 hover:text-slate-600 text-[11px]"
-                      >
-                        Recolher
-                      </button>
+                      <span>
+                        {entryFlowMode === 'other'
+                          ? 'Descrição / Motivo da Entrada:'
+                          : 'Descrição / Produto Específico:'}
+                      </span>
+                      {entryFlowMode === 'venda' && (
+                        <button
+                          type="button"
+                          onClick={() => setShowExtraOptions(false)}
+                          className="text-slate-400 hover:text-slate-600 text-[11px]"
+                        >
+                          Recolher
+                        </button>
+                      )}
                     </div>
 
                     <input
                       type="text"
-                      placeholder="Ex: Pastel de Carne, Refrigerante 2L, Reparo..."
+                      placeholder={
+                        entryFlowMode === 'other'
+                          ? 'Ex: Troco inicial, entrega avulsa, reembolso...'
+                          : 'Ex: Pastel de Carne, Refrigerante 2L, Reparo...'
+                      }
                       value={description}
                       onChange={(e) => {
                         setDescription(e.target.value);
@@ -679,8 +832,8 @@ export const NumpadSaleModal: React.FC<NumpadSaleModalProps> = ({
                       className="w-full px-3 py-2 rounded-xl bg-white border border-slate-300 text-slate-900 text-xs focus:outline-none focus:border-emerald-500 font-medium"
                     />
 
-                    {/* Quick products chips */}
-                    {products.length > 0 && (
+                    {/* Quick products chips (apenas no fluxo de Venda) */}
+                    {entryFlowMode === 'venda' && products.length > 0 && (
                       <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1">
                         {products.slice(0, 8).map((prod) => {
                           const isSelected = selectedQuickProduct?.id === prod.id;
@@ -892,7 +1045,7 @@ export const NumpadSaleModal: React.FC<NumpadSaleModalProps> = ({
             <div className="flex items-center justify-between text-xs font-bold text-slate-700">
               <span className="flex items-center gap-1.5">
                 <User className="w-3.5 h-3.5 text-emerald-600" />
-                <span>Cliente {paymentMethod === 'fiado' ? '(Obrigatório para fiado)' : '(Opcional)'}</span>
+                <span>Cliente {paymentMethod === 'fiado' ? '(Obrigatório para a prazo)' : '(Opcional)'}</span>
               </span>
 
               {customerName && (
@@ -1115,7 +1268,9 @@ export const NumpadSaleModal: React.FC<NumpadSaleModalProps> = ({
                 <option value="dinheiro">Dinheiro Físico</option>
                 <option value="cartao_debito">Cartão de Débito</option>
                 <option value="cartao_credito">Cartão de Crédito</option>
-                <option value="fiado">Venda a Prazo (Fiado / Notinha)</option>
+                {entryFlowMode === 'venda' && (
+                  <option value="fiado">Venda a Prazo (Notinha)</option>
+                )}
               </select>
               <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-emerald-600">
                 {paymentMethod === 'pix' && <QrCode className="w-5 h-5" />}
@@ -1181,7 +1336,13 @@ export const NumpadSaleModal: React.FC<NumpadSaleModalProps> = ({
         </div>
 
         {/* Sticky Action Footer */}
-        <div className="shrink-0 bg-white border-t border-slate-100 p-4 z-20 pb-safe">
+        <div className="shrink-0 bg-white border-t border-slate-100 p-4 z-20 pb-safe space-y-2">
+          {formError && (
+            <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span>{formError}</span>
+            </div>
+          )}
           <button
             type="button"
             disabled={totalAmount <= 0}
@@ -1190,20 +1351,26 @@ export const NumpadSaleModal: React.FC<NumpadSaleModalProps> = ({
               totalAmount > 0
                 ? entryCategory === 'estorno'
                   ? 'bg-purple-600 hover:bg-purple-700 text-white active:scale-[0.98]'
+                  : entryFlowMode === 'other'
+                  ? 'bg-amber-600 hover:bg-amber-700 text-white active:scale-[0.98]'
                   : 'bg-emerald-600 hover:bg-emerald-700 text-white active:scale-[0.98]'
                 : 'bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200'
             }`}
           >
             <Check className="w-5 h-5 stroke-[2.5]" />
             <span>
-              {entryCategory === 'estorno'
+              {entryFlowMode === 'venda'
+                ? `FINALIZAR VENDA (${formatCurrency(totalAmount)})`
+                : entryCategory === 'estorno'
                 ? `CONFIRMAR ESTORNO (${formatCurrency(totalAmount)})`
                 : entryCategory === 'servico'
                 ? `CONFIRMAR SERVIÇO (${formatCurrency(totalAmount)})`
-                : `FINALIZAR ENTRADA (${formatCurrency(totalAmount)})`}
+                : `CONFIRMAR ENTRADA (${formatCurrency(totalAmount)})`}
             </span>
           </button>
         </div>
+          </>
+        )}
       </div>
     </div>
   );

@@ -3,7 +3,36 @@ import { UserAccount, SubscriptionStatus } from '../types';
 const AUTH_KEYS = {
   USERS_LIST: 'vendeai_users_list_v2',
   CURRENT_USER_ID: 'vendeai_current_user_id_v2',
+  PENDING_PROFILE: 'vendeai_pending_profile_v1',
 };
+
+export interface PendingUserProfile {
+  name: string;
+  email: string;
+  phone: string;
+  businessName: string;
+}
+
+export function savePendingProfile(profile: PendingUserProfile | null) {
+  try {
+    if (profile) {
+      localStorage.setItem(AUTH_KEYS.PENDING_PROFILE, JSON.stringify(profile));
+    } else {
+      localStorage.removeItem(AUTH_KEYS.PENDING_PROFILE);
+    }
+  } catch {
+    // Ignore storage errors
+  }
+}
+
+export function readPendingProfile(): PendingUserProfile | null {
+  try {
+    const raw = localStorage.getItem(AUTH_KEYS.PENDING_PROFILE);
+    return raw ? (JSON.parse(raw) as PendingUserProfile) : null;
+  } catch {
+    return null;
+  }
+}
 
 // Purge old demo artifacts from browser storage on load
 if (typeof window !== 'undefined') {
@@ -88,9 +117,12 @@ export function setCurrentUser(user: UserAccount | null) {
 export function upsertLocalUser(user: UserAccount): UserAccount {
   try {
     const users = getRegisteredUsers();
-    const idx = users.findIndex((u) => u.id === user.id || (user.email && u.email.toLowerCase() === user.email.toLowerCase()));
+    const cleanEmail = (user.email || '').trim().toLowerCase();
+    const idx = users.findIndex(
+      (u) => u.id === user.id || (cleanEmail && u.email?.toLowerCase() === cleanEmail)
+    );
     if (idx >= 0) {
-      users[idx] = { ...users[idx], ...user };
+      users[idx] = { ...users[idx], ...user, id: user.id };
     } else {
       users.unshift(user);
     }

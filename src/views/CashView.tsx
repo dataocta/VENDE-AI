@@ -18,9 +18,12 @@ import {
   Edit,
   SlidersHorizontal,
   Search,
+  DollarSign,
+  ArrowRight,
 } from 'lucide-react';
-import { DailyRegister, BusinessSettings, Sale, Expense } from '../types';
+import { DailyRegister, BusinessSettings, Sale, Expense, CustomerDebt } from '../types';
 import { formatCurrency, formatDateOnlyBR, formatTimeOnlyBR } from '../utils/receipt';
+import { isRealSaleEntry, isFiadoPaymentEntry, isOtherCashEntry, isCashInflowEntry, isPaidSaleEntry } from '../utils/storage';
 import { EditSaleModal } from '../components/EditSaleModal';
 import { EditExpenseModal } from '../components/EditExpenseModal';
 
@@ -29,11 +32,14 @@ type DateFilterOption = 'hoje' | 'ontem' | '7dias' | 'mes' | 'todos' | 'custom';
 interface CashViewProps {
   sales: Sale[];
   expenses: Expense[];
+  debts?: CustomerDebt[];
   register: DailyRegister;
   settings: BusinessSettings;
   dateStr: string; // Today's date YYYY-MM-DD
   onUpdateOpeningBalance: (amount: number) => void;
   onOpenCloseRegister: () => void;
+  onOpenPaymentModal?: (debt: CustomerDebt) => void;
+  onNavigateToCustomers?: () => void;
   onUpdateSale?: (sale: Sale) => void;
   onDeleteSale?: (saleId: string) => void;
   onUpdateExpense?: (expense: Expense) => void;
@@ -43,11 +49,14 @@ interface CashViewProps {
 export const CashView: React.FC<CashViewProps> = ({
   sales,
   expenses,
+  debts = [],
   register,
   settings,
   dateStr,
   onUpdateOpeningBalance,
   onOpenCloseRegister,
+  onOpenPaymentModal,
+  onNavigateToCustomers,
   onUpdateSale,
   onDeleteSale,
   onUpdateExpense,
@@ -127,14 +136,45 @@ export const CashView: React.FC<CashViewProps> = ({
     return { filteredSales: sList, filteredExpenses: eList, periodLabel: label };
   }, [filterOption, customDate, sales, expenses, dateStr, yesterdayStr, sevenDaysAgoStr, currentMonthPrefix]);
 
-  const totalSales = filteredSales.reduce((acc, s) => acc + s.totalAmount, 0);
+  const salesOnly = useMemo(() => filteredSales.filter(isRealSaleEntry), [filteredSales]);
+  const cashInflows = useMemo(() => filteredSales.filter(isCashInflowEntry), [filteredSales]);
+  const paidSalesOnly = useMemo(() => filteredSales.filter(isPaidSaleEntry), [filteredSales]);
+  const paidSalesTotal = paidSalesOnly.reduce((acc, s) => acc + s.totalAmount, 0);
+  const fiadoSalesTotal = useMemo(
+    () =>
+      salesOnly
+        .filter((s) => s.paymentMethod === 'fiado')
+        .reduce((acc, s) => acc + s.totalAmount, 0),
+    [salesOnly]
+  );
+  const fiadoReceivedTotal = useMemo(
+    () => filteredSales.filter(isFiadoPaymentEntry).reduce((acc, s) => acc + s.totalAmount, 0),
+    [filteredSales]
+  );
+  const otherEntriesTotal = useMemo(
+    () => filteredSales.filter(isOtherCashEntry).reduce((acc, s) => acc + s.totalAmount, 0),
+    [filteredSales]
+  );
+  // Saldo recebido no caixa: apenas o que de fato entrou (vendas pagas + recebimentos de fiado + outras entradas)
+  const totalSales = cashInflows.reduce((acc, s) => acc + s.totalAmount, 0);
+  const totalOtherInflows = fiadoReceivedTotal + otherEntriesTotal;
   const totalExpenses = filteredExpenses.reduce((acc, e) => acc + e.amount, 0);
   const netProfit = totalSales - totalExpenses;
 
-  // Ranking of most sold products in the filtered period
+  // Painel geral de A Receber A Prazo (todos os clientes devendo)
+  const openDebts = useMemo(
+    () => debts.filter((d) => d.totalOwed > 0).sort((a, b) => b.totalOwed - a.totalOwed),
+    [debts]
+  );
+  const totalReceivableAll = useMemo(
+    () => openDebts.reduce((acc, d) => acc + d.totalOwed, 0),
+    [openDebts]
+  );
+
+  // Ranking of most sold products in the filtered period (apenas vendas reais)
   const topSoldProducts = useMemo(() => {
     const counts: Record<string, { name: string; quantity: number; revenue: number }> = {};
-    filteredSales.forEach((sale) => {
+    salesOnly.forEach((sale) => {
       sale.items.forEach((item) => {
         const key = item.name.trim();
         if (!key) return;
@@ -148,7 +188,7 @@ export const CashView: React.FC<CashViewProps> = ({
     return Object.values(counts)
       .sort((a, b) => b.quantity - a.quantity)
       .slice(0, 5);
-  }, [filteredSales]);
+  }, [salesOnly]);
 
   // Breakdown by payment methods for filtered period
   const byMethod: Record<string, number> = {
@@ -185,21 +225,35 @@ export const CashView: React.FC<CashViewProps> = ({
       | { type: 'despesa'; id: string; date: string; amount: number; expense: Expense; title: string; subtitle: string; code: string; paymentMethod: string; customerName?: undefined };
 
     const list: TxItem[] = [
-      ...filteredSales.map((s) => ({
-        type: 'venda' as const,
-        id: s.id,
-        date: s.date,
-        amount: s.totalAmount,
-        sale: s,
-        title:
-          s.category && s.category !== 'Venda'
-            ? `${s.category}: ${s.items.map((i) => i.name).join(', ') || 'Entrada'}`
-            : s.items.map((i) => `${i.quantity}x ${i.name}`).join(', ') || 'Venda Balcão',
-        subtitle: `${formatDateOnlyBR(s.date.split('T')[0])} ${formatTimeOnlyBR(s.date)}${s.category && s.category !== 'Venda' ? ` · Categoria: ${s.category}` : ''}${s.customerName ? ` · Cliente: ${s.customerName}` : ''}`,
-        code: s.code || '',
-        paymentMethod: s.paymentMethod === 'fiado' ? 'A Prazo' : s.paymentMethod.replace('_', ' '),
-        customerName: s.customerName,
-      })),
+      ...filteredSales.map((s) => {
+        const isFiadoRec = isFiadoPaymentEntry(s);
+        const isOther = isOtherCashEntry(s);
+        const displayTitle = isFiadoRec
+          ? `Recebimento A Prazo: ${s.customerName || s.items?.[0]?.name?.replace('Recebimento A Prazo: ', '') || 'Cliente'}`
+          : s.category && s.category !== 'Venda'
+          ? `${s.category}: ${s.items.map((i) => i.name).join(', ') || 'Entrada'}`
+          : s.items.map((i) => `${i.quantity}x ${i.name}`).join(', ') || 'Venda Balcão';
+        return {
+          type: 'venda' as const,
+          id: s.id,
+          date: s.date,
+          amount: s.totalAmount,
+          sale: s,
+          title: displayTitle,
+          subtitle: `${formatDateOnlyBR(s.date.split('T')[0])} ${formatTimeOnlyBR(s.date)}${
+            isFiadoRec
+              ? ' · Receb. A Prazo'
+              : isOther && s.category
+              ? ` · ${s.category}`
+              : s.category && s.category !== 'Venda'
+              ? ` · Categoria: ${s.category}`
+              : ''
+          }${s.customerName && !isFiadoRec ? ` · Cliente: ${s.customerName}` : ''}`,
+          code: s.code || '',
+          paymentMethod: s.paymentMethod === 'fiado' ? 'A Prazo' : s.paymentMethod.replace('_', ' '),
+          customerName: s.customerName,
+        };
+      }),
       ...filteredExpenses.map((e) => ({
         type: 'despesa' as const,
         id: e.id,
@@ -235,15 +289,20 @@ export const CashView: React.FC<CashViewProps> = ({
 
   const handleShareSummary = () => {
     const lines = [
-      `📊 *RESUMO DE CAIXA & LUCRO*`,
+      `📊 *RESUMO DE CAIXA & SALDO*`,
       `🏬 *${settings.businessName || 'Meu Negócio'}*`,
       `📅 Período: ${periodLabel}`,
       `--------------------------------`,
-      `🟢 *Entradas / Vendas:* ${formatCurrency(totalSales)} (${filteredSales.length} vendas)`,
+      `🟢 *Recebido no Caixa:* ${formatCurrency(totalSales)} (${cashInflows.length} lanç.)`,
+      `   • Vendas pagas na hora: ${formatCurrency(paidSalesTotal)}`,
+      ...(fiadoReceivedTotal > 0 ? [`   • Recebimento A Prazo: ${formatCurrency(fiadoReceivedTotal)}`] : []),
+      ...(otherEntriesTotal > 0 ? [`   • Outras Entradas: ${formatCurrency(otherEntriesTotal)}`] : []),
+      ...(fiadoSalesTotal > 0 ? [`📝 *Vendido A Prazo no período (não entrou):* ${formatCurrency(fiadoSalesTotal)}`] : []),
       `🔴 *Saídas / Despesas:* ${formatCurrency(totalExpenses)} (${filteredExpenses.length} despesas)`,
-      `💰 *LUCRO LÍQUIDO:* ${formatCurrency(netProfit)}`,
+      `💰 *SALDO LÍQUIDO EM CAIXA:* ${formatCurrency(netProfit)}`,
+      ...(totalReceivableAll > 0 ? [`📌 *TOTAL A RECEBER A PRAZO (GERAL):* ${formatCurrency(totalReceivableAll)}`] : []),
       `--------------------------------`,
-      `*Recebimentos:*`,
+      `*Recebimentos no Caixa:*`,
       `💵 Dinheiro: ${formatCurrency(byMethod.dinheiro)}`,
       `⚡ PIX: ${formatCurrency(byMethod.pix)}`,
       `💳 Cartões: ${formatCurrency(totalCards)}`,
@@ -384,7 +443,7 @@ export const CashView: React.FC<CashViewProps> = ({
           <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-xs space-y-4">
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                {filterOption === 'hoje' ? 'Lucro de Hoje' : `Lucro (${periodLabel})`}
+                {filterOption === 'hoje' ? 'Saldo em Caixa (Hoje)' : `Saldo em Caixa (${periodLabel})`}
               </span>
 
               <button
@@ -407,8 +466,13 @@ export const CashView: React.FC<CashViewProps> = ({
                 {formatCurrency(netProfit)}
               </div>
               <p className="text-xs text-slate-500 mt-1">
-                Vendas ({formatCurrency(totalSales)}) menos Gastos ({formatCurrency(totalExpenses)})
+                Recebido no caixa ({formatCurrency(totalSales)}) menos Gastos ({formatCurrency(totalExpenses)})
               </p>
+              {fiadoSalesTotal > 0 && (
+                <p className="text-[11px] font-semibold text-amber-700 mt-0.5">
+                  + {formatCurrency(fiadoSalesTotal)} vendido a prazo no período (não somado ao saldo até receber)
+                </p>
+              )}
             </div>
 
             {/* Two Clean Indicators */}
@@ -416,11 +480,16 @@ export const CashView: React.FC<CashViewProps> = ({
               <div className="bg-emerald-50/60 border border-emerald-100 rounded-2xl p-3">
                 <div className="flex items-center gap-1.5 text-xs text-emerald-800 font-semibold mb-0.5">
                   <ArrowUpRight className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>Entradas ({filteredSales.length})</span>
+                  <span>Recebido ({cashInflows.length})</span>
                 </div>
                 <div className="text-xl font-extrabold text-emerald-700 font-mono-numbers">
                   {formatCurrency(totalSales)}
                 </div>
+                {totalOtherInflows > 0 && (
+                  <div className="text-[10px] font-bold text-teal-700 mt-0.5">
+                    Inclui {formatCurrency(totalOtherInflows)} a prazo/outros
+                  </div>
+                )}
               </div>
 
               <div className="bg-rose-50/60 border border-rose-100 rounded-2xl p-3">
@@ -433,6 +502,76 @@ export const CashView: React.FC<CashViewProps> = ({
                 </div>
               </div>
             </div>
+          </div>
+
+          {/* 1.5 Painel A Receber A Prazo */}
+          <div className="bg-amber-50/70 border border-amber-200 rounded-3xl p-5 shadow-xs space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="w-9 h-9 rounded-2xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-xs">
+                  <BookUser className="w-4 h-4" />
+                </div>
+                <div className="min-w-0">
+                  <h3 className="text-xs font-black uppercase tracking-wider text-amber-950">
+                    Para Receber A Prazo
+                  </h3>
+                  <p className="text-[11px] text-amber-800/80 font-medium">
+                    {openDebts.length === 0
+                      ? 'Nenhum valor pendente de clientes'
+                      : `${openDebts.length} ${openDebts.length === 1 ? 'cliente com saldo em aberto' : 'clientes com saldo em aberto'}`}
+                  </p>
+                </div>
+              </div>
+              <div className="text-right shrink-0">
+                <div className="text-2xl font-black text-amber-800 font-mono-numbers">
+                  {formatCurrency(totalReceivableAll)}
+                </div>
+              </div>
+            </div>
+
+            {openDebts.length > 0 && (
+              <div className="space-y-1.5 pt-2 border-t border-amber-200/70">
+                {openDebts.slice(0, 3).map((d) => (
+                  <div
+                    key={d.id}
+                    className="bg-white/90 border border-amber-200/80 rounded-2xl px-3 py-2 flex items-center justify-between gap-2 text-xs"
+                  >
+                    <div className="min-w-0">
+                      <div className="font-bold text-slate-900 truncate">{d.name}</div>
+                      <div className="text-[11px] text-slate-500">
+                        {d.dueDate ? `Vencimento: ${formatDateOnlyBR(d.dueDate)}` : 'Saldo em aberto'}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="font-black text-amber-800 font-mono-numbers">
+                        {formatCurrency(d.totalOwed)}
+                      </span>
+                      {onOpenPaymentModal && (
+                        <button
+                          type="button"
+                          onClick={() => onOpenPaymentModal(d)}
+                          className="px-2.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-[11px] flex items-center gap-1 shadow-2xs transition-colors"
+                        >
+                          <DollarSign className="w-3 h-3" />
+                          <span>Receber</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {onNavigateToCustomers && (
+              <button
+                type="button"
+                onClick={onNavigateToCustomers}
+                className="w-full py-2 rounded-xl bg-white hover:bg-amber-100/70 border border-amber-200 text-amber-900 text-xs font-extrabold flex items-center justify-center gap-1.5 transition-colors"
+              >
+                <span>Ver Painel Completo de Clientes A Prazo</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
 
           {/* 2. Onde está o dinheiro (Distribuição de Meios de Pagamento) */}
@@ -476,14 +615,17 @@ export const CashView: React.FC<CashViewProps> = ({
               </div>
 
               {/* A Prazo */}
-              <div className="p-3 rounded-2xl border border-slate-200 bg-slate-50/50 flex flex-col justify-between">
-                <div className="flex items-center gap-1.5 text-xs text-amber-700 font-medium">
+              <div className="p-3 rounded-2xl border border-amber-200 bg-amber-50/50 flex flex-col justify-between">
+                <div className="flex items-center gap-1.5 text-xs text-amber-800 font-medium">
                   <BookUser className="w-3.5 h-3.5 text-amber-600" />
                   <span>A Prazo</span>
                 </div>
                 <div className="text-lg font-black text-amber-700 font-mono-numbers mt-1">
                   {formatCurrency(byMethod.fiado)}
                 </div>
+                <span className="text-[10px] text-amber-700/80 font-medium">
+                  Não soma no saldo até pagar
+                </span>
               </div>
             </div>
           </div>
@@ -673,7 +815,7 @@ export const CashView: React.FC<CashViewProps> = ({
                     : 'text-slate-500 hover:text-emerald-700'
                 }`}
               >
-                Vendas ({filteredSales.length})
+                Entradas ({filteredSales.length})
               </button>
               <button
                 type="button"
@@ -715,15 +857,31 @@ export const CashView: React.FC<CashViewProps> = ({
                       <span
                         className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-lg flex items-center gap-1 ${
                           tx.type === 'venda'
-                            ? 'bg-emerald-100 text-emerald-800'
+                            ? isFiadoPaymentEntry(tx.sale)
+                              ? 'bg-teal-100 text-teal-800'
+                              : isOtherCashEntry(tx.sale)
+                              ? 'bg-amber-100 text-amber-800'
+                              : 'bg-emerald-100 text-emerald-800'
                             : 'bg-rose-100 text-rose-800'
                         }`}
                       >
                         {tx.type === 'venda' ? (
                           <>
-                            <ArrowUpRight className="w-3 h-3 text-emerald-600" />
+                            <ArrowUpRight
+                              className={`w-3 h-3 ${
+                                isFiadoPaymentEntry(tx.sale)
+                                  ? 'text-teal-600'
+                                  : isOtherCashEntry(tx.sale)
+                                  ? 'text-amber-600'
+                                  : 'text-emerald-600'
+                              }`}
+                            />
                             <span>
-                              {tx.sale.category && tx.sale.category !== 'Venda' ? tx.sale.category : 'Venda'}{' '}
+                              {isFiadoPaymentEntry(tx.sale)
+                                ? 'Recebimento A Prazo'
+                                : tx.sale.category && tx.sale.category !== 'Venda'
+                                ? tx.sale.category
+                                : 'Venda'}{' '}
                               {tx.code ? `#${tx.code}` : ''}
                             </span>
                           </>

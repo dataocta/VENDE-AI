@@ -276,7 +276,7 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
               <p className="text-[11px] text-slate-600">
                 {selectedPlan === 'annual'
                   ? 'Equivalente a R$ 12,49/mês — economia de 22% no ano'
-                  : 'Apenas R$ 0,53 por dia para controlar vendas, despesas e fiado'}
+                  : 'Apenas R$ 0,53 por dia para controlar vendas, despesas e vendas a prazo'}
               </p>
             </div>
 

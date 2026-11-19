@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { Sale, BusinessSettings } from '../types';
 import { formatCurrency } from '../utils/receipt';
+import { isRealSaleEntry } from '../utils/storage';
 
 interface SalesAnalyticsChartsProps {
   sales: Sale[];
@@ -26,8 +27,8 @@ export const SalesAnalyticsCharts: React.FC<SalesAnalyticsChartsProps> = ({
   const [activePointIndex, setActivePointIndex] = useState<number | null>(null);
 
   // 1. Group sales by day (last 7 calendar days)
-  const { dailyData, bestDay, totalPeriodSales } = useMemo(() => {
-    const completed = sales.filter((s) => s.status === 'concluida');
+  const { dailyData, bestDay, totalPeriodSales, totalPeriodFiado } = useMemo(() => {
+    const completed = sales.filter(isRealSaleEntry);
 
     const days: { dateStr: string; label: string; dayOfWeek: string; total: number; count: number }[] = [];
     const dayNames = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
@@ -63,11 +64,15 @@ export const SalesAnalyticsCharts: React.FC<SalesAnalyticsChartsProps> = ({
     });
 
     const totalPeriodSales = days.reduce((acc, d) => acc + d.total, 0);
+    const totalPeriodFiado = completed
+      .filter((s) => s.paymentMethod === 'fiado' && days.some((d) => s.date.startsWith(d.dateStr)))
+      .reduce((acc, s) => acc + s.totalAmount, 0);
 
     return {
       dailyData: days,
       bestDay: maxVal > 0 ? best : null,
       totalPeriodSales,
+      totalPeriodFiado,
     };
   }, [sales]);
 
@@ -119,7 +124,7 @@ export const SalesAnalyticsCharts: React.FC<SalesAnalyticsChartsProps> = ({
     const productMap = new Map<string, { name: string; quantity: number; revenue: number }>();
 
     sales
-      .filter((s) => s.status === 'concluida')
+      .filter(isRealSaleEntry)
       .forEach((sale) => {
         sale.items.forEach((item) => {
           const key = item.name.trim();
@@ -145,7 +150,7 @@ export const SalesAnalyticsCharts: React.FC<SalesAnalyticsChartsProps> = ({
 
     let grandTotal = 0;
     sales
-      .filter((s) => s.status === 'concluida')
+      .filter(isRealSaleEntry)
       .forEach((s) => {
         grandTotal += s.totalAmount;
         if (s.paymentMethod === 'pix') {
@@ -212,8 +217,13 @@ export const SalesAnalyticsCharts: React.FC<SalesAnalyticsChartsProps> = ({
                 <TrendingUp className="w-3.5 h-3.5 text-emerald-600" />
                 <span>Gráfico de Vendas por Linha</span>
               </span>
-              <span className="text-xs font-mono-numbers text-slate-500">
-                Total: <strong>{formatCurrency(totalPeriodSales)}</strong>
+              <span className="text-xs font-mono-numbers text-slate-500 text-right">
+                Recebido: <strong className="text-emerald-700">{formatCurrency(totalPeriodSales - totalPeriodFiado)}</strong>
+                {totalPeriodFiado > 0 && (
+                  <span className="block text-[10px] text-amber-700 font-semibold">
+                    +{formatCurrency(totalPeriodFiado)} a prazo
+                  </span>
+                )}
               </span>
             </div>
 

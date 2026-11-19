@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { Customer, CustomerDebt, BusinessSettings, Sale } from '../types';
 import { formatCurrency, formatDateOnlyBR, generateWhatsAppDebtReminder } from '../utils/receipt';
+import { isRealSaleEntry } from '../utils/storage';
 
 interface CustomersViewProps {
   customers: Customer[];
@@ -82,8 +83,10 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
       );
       const clientSales = sales
         .filter(
-          (s) => (s.customerName && s.customerName.trim().toLowerCase() === normKey) ||
-                 (c.phone && s.customerPhone && s.customerPhone.replace(/\D/g, '') === c.phone.replace(/\D/g, ''))
+          (s) =>
+            isRealSaleEntry(s) &&
+            ((s.customerName && s.customerName.trim().toLowerCase() === normKey) ||
+              (c.phone && s.customerPhone && s.customerPhone.replace(/\D/g, '') === c.phone.replace(/\D/g, '')))
         )
         .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
       
@@ -120,7 +123,10 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
         };
         const clientSales = sales
           .filter(
-            (s) => s.customerName && s.customerName.trim().toLowerCase() === d.name.trim().toLowerCase()
+            (s) =>
+              isRealSaleEntry(s) &&
+              s.customerName &&
+              s.customerName.trim().toLowerCase() === d.name.trim().toLowerCase()
           )
           .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
         const totalSpent = clientSales.reduce((acc, s) => acc + s.totalAmount, 0);

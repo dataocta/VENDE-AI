@@ -24,20 +24,29 @@ import {
 } from '../types';
 
 /**
- * Clean data object to remove undefined fields that Firestore rejects
+ * Clean data object recursively (including arrays and nested objects)
+ * to remove undefined fields that Firestore rejects
  */
-function sanitizeForFirestore<T extends Record<string, any>>(obj: T): T {
-  const result: any = {};
-  for (const [key, val] of Object.entries(obj)) {
-    if (val !== undefined) {
-      if (val && typeof val === 'object' && !Array.isArray(val) && !(val instanceof Date)) {
-        result[key] = sanitizeForFirestore(val);
-      } else {
-        result[key] = val;
-      }
+function sanitizeValue(val: unknown): unknown {
+  if (val === undefined) return undefined;
+  if (val === null || typeof val !== 'object' || val instanceof Date) return val;
+  if (Array.isArray(val)) {
+    return val
+      .map((item) => sanitizeValue(item))
+      .filter((item) => item !== undefined);
+  }
+  const result: Record<string, unknown> = {};
+  for (const [key, v] of Object.entries(val as Record<string, unknown>)) {
+    const cleaned = sanitizeValue(v);
+    if (cleaned !== undefined) {
+      result[key] = cleaned;
     }
   }
-  return result as T;
+  return result;
+}
+
+function sanitizeForFirestore<T extends Record<string, any>>(obj: T): T {
+  return sanitizeValue(obj) as T;
 }
 
 // -------------------------------------------------------------

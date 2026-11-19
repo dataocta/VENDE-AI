@@ -22,14 +22,20 @@ import {
   X,
   CheckCircle2,
 } from 'lucide-react';
-import { signInWithPopup } from 'firebase/auth';
+import {
+  signInWithPopup,
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  updateProfile,
+} from 'firebase/auth';
 import { auth, googleProvider } from '../firebase';
 import {
-  registerUser,
   loginUser,
   saveRegisteredUsers,
   getRegisteredUsers,
   setCurrentUser,
+  upsertLocalUser,
+  savePendingProfile,
 } from '../utils/authStorage';
 import { getUserProfileFirestore, saveUserProfileFirestore } from '../utils/firestoreService';
 import { UserAccount, PendingStripeCheckout } from '../types';
@@ -148,7 +154,7 @@ export const AuthView: React.FC<AuthViewProps> = ({
         'Acesso completo a todas as funções',
         'Cadastro ilimitado de produtos e clientes',
         'Comprovante no WhatsApp com sua Chave Pix',
-        'Controle de fiado e fechamento de caixa',
+        'Controle de vendas a prazo e fechamento de caixa',
         'Sem pedir dados de cartão no cadastro',
       ],
       buttonLabel: 'Começar 7 Dias Grátis',
@@ -165,7 +171,7 @@ export const AuthView: React.FC<AuthViewProps> = ({
       features: [
         '7 dias iniciais grátis para testar',
         'Sincronização em nuvem no celular e no PC',
-        'Controle de fiado com histórico e cobrança',
+        'Controle de vendas a prazo com histórico e cobrança',
         'Relatório automático de lucro limpo do dia',
         'Categorias personalizadas de produtos e despesas',
         'Suporte direto e cancelamento sem multa',
@@ -231,7 +237,7 @@ export const AuthView: React.FC<AuthViewProps> = ({
       image: dashboardShowcaseImg,
       imageAlt: 'Painel Financeiro do Vende.ai exibindo vendas, lucro limpo e resumo diário',
       highlights: [
-        'Separação clara entre Pix, Dinheiro Físico, Cartão e Fiado',
+        'Separação clara entre Pix, Dinheiro Físico, Cartão e A Prazo',
         'Categorias personalizadas para produtos e também para suas despesas',
         'Conferência e fechamento de caixa diário em menos de 1 minuto',
         'Edite ou corrija qualquer lançamento antigo direto pelo histórico',
@@ -239,16 +245,16 @@ export const AuthView: React.FC<AuthViewProps> = ({
     },
     whatsapp: {
       id: 'whatsapp',
-      tabLabel: '03. WhatsApp e Fiado',
+      tabLabel: '03. WhatsApp e A Prazo',
       eyebrow: 'Cobrança Profissional',
-      title: 'Recibos no WhatsApp e caderno de fiado organizado',
+      title: 'Recibos no WhatsApp e caderno a prazo organizado',
       description:
         'Passe mais confiança aos clientes enviando o comprovante completo com um toque, já com sua Chave Pix. Controle quem está devendo e envie lembretes educados sem constrangimento.',
       image: whatsappFiadoImg,
-      imageAlt: 'Comprovante de pagamento Pix e controle de fiado no WhatsApp pelo Vende.ai',
+      imageAlt: 'Comprovante de pagamento Pix e controle a prazo no WhatsApp pelo Vende.ai',
       highlights: [
         'Comprovante formatado com nome da barraca, itens e Chave Pix',
-        'Controle de amortização e pagamentos parciais no fiado',
+        'Controle de amortização e pagamentos parciais a prazo',
         'Histórico individual de compras e pagamentos por cliente',
         'Botão direto para cobrar no WhatsApp com texto pronto',
       ],
@@ -270,7 +276,7 @@ export const AuthView: React.FC<AuthViewProps> = ({
     },
     {
       q: 'Se eu trocar de celular ou perder o aparelho, perco minhas vendas?',
-      a: 'Não. Todos os seus produtos, clientes, vendas e saldos de fiado ficam salvos com segurança na nuvem. Basta entrar com seu e-mail ou conta Google em outro aparelho.',
+      a: 'Não. Todos os seus produtos, clientes, vendas e saldos a prazo ficam salvos com segurança na nuvem. Basta entrar com seu e-mail ou conta Google em outro aparelho.',
     },
   ];
 
@@ -355,20 +361,180 @@ export const AuthView: React.FC<AuthViewProps> = ({
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handleLoginSubmit = (e: React.FormEvent) => {
+  const mergePendingStripeIntoAccount = (account: UserAccount): UserAccount => {
+    if (!pendingStripeCheckout) return account;
+    const nowIso = new Date().toISOString();
+    return {
+      ...account,
+      subscriptionStatus: pendingStripeCheckout.subscriptionStatus || 'active',
+      stripeCustomerId: pendingStripeCheckout.stripeCustomerId || account.stripeCustomerId,
+      stripeSubscriptionId:
+        pendingStripeCheckout.stripeSubscriptionId || account.stripeSubscriptionId,
+      selectedPlan: pendingStripeCheckout.plan || account.selectedPlan,
+      planPrice: pendingStripeCheckout.planPrice || account.planPrice,
+      subscriptionPaidAt: account.subscriptionPaidAt || nowIso,
+      subscriptionExpiresAt:
+        pendingStripeCheckout.currentPeriodEnd || account.subscriptionExpiresAt,
+      trialEndsAt:
+        pendingStripeCheckout.subscriptionStatus === 'trial' &&
+        pendingStripeCheckout.currentPeriodEnd
+          ? pendingStripeCheckout.currentPeriodEnd
+          : account.trialEndsAt,
+    };
+  };
+
+  const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
     setIsLoading(true);
 
-    setTimeout(() => {
-      const res = loginUser(loginIdentifier, loginPassword);
-      setIsLoading(false);
+    const identifier = loginIdentifier.trim();
+    const cleanEmail = identifier.toLowerCase();
+    const isEmailLogin = cleanEmail.includes('@');
+
+    try {
+      if (isEmailLogin) {
+        try {
+          const cred = await signInWithEmailAndPassword(auth, cleanEmail, loginPassword);
+          const fbUser = cred.user;
+          const localUsers = getRegisteredUsers();
+          const existingLocal = localUsers.find((u) => u.email.toLowerCase() === cleanEmail);
+
+          let userAccount = await getUserProfileFirestore(fbUser.uid);
+          if (!userAccount) {
+            const now = new Date();
+            const sevenDaysLater = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+            const fallbackName =
+              existingLocal?.name || fbUser.displayName || cleanEmail.split('@')[0] || 'Vendedor';
+
+            userAccount = {
+              id: fbUser.uid,
+              name: fallbackName,
+              email: cleanEmail,
+              phone: existingLocal?.phone || fbUser.phoneNumber || '',
+              businessName:
+                existingLocal?.businessName || `Vendas de ${fallbackName.split(' ')[0] || 'Rua'}`,
+              createdAt: existingLocal?.createdAt || now.toISOString(),
+              trialEndsAt: existingLocal?.trialEndsAt || sevenDaysLater.toISOString(),
+              subscriptionStatus: existingLocal?.subscriptionStatus || 'trial',
+              planPrice: existingLocal?.planPrice || 15.97,
+              selectedPlan: existingLocal?.selectedPlan,
+              stripeCustomerId: existingLocal?.stripeCustomerId,
+              stripeSubscriptionId: existingLocal?.stripeSubscriptionId,
+              subscriptionPaidAt: existingLocal?.subscriptionPaidAt,
+              subscriptionExpiresAt: existingLocal?.subscriptionExpiresAt,
+            };
+          }
+
+          userAccount = mergePendingStripeIntoAccount(userAccount);
+          await saveUserProfileFirestore(userAccount);
+          upsertLocalUser(userAccount);
+          setIsLoading(false);
+          onAuthSuccess(userAccount);
+          return;
+        } catch (fbErr: any) {
+          const code = fbErr?.code || '';
+          const localUsers = getRegisteredUsers();
+          const legacyLocal = localUsers.find((u) => u.email.toLowerCase() === cleanEmail);
+
+          // Se for usuário antigo apenas local com senha correta, tenta migrar para Firebase Auth + Firestore
+          if (
+            legacyLocal &&
+            legacyLocal.password === loginPassword &&
+            code !== 'auth/too-many-requests'
+          ) {
+            if (code !== 'auth/operation-not-allowed' && loginPassword.length >= 6) {
+              try {
+                savePendingProfile({
+                  name: legacyLocal.name,
+                  email: cleanEmail,
+                  phone: legacyLocal.phone || '',
+                  businessName: legacyLocal.businessName,
+                });
+                const migratedCred = await createUserWithEmailAndPassword(
+                  auth,
+                  cleanEmail,
+                  loginPassword
+                );
+                await updateProfile(migratedCred.user, {
+                  displayName: legacyLocal.name,
+                }).catch(() => {});
+                const migratedAccount = mergePendingStripeIntoAccount({
+                  ...legacyLocal,
+                  id: migratedCred.user.uid,
+                  email: cleanEmail,
+                });
+                await saveUserProfileFirestore(migratedAccount);
+                savePendingProfile(null);
+                upsertLocalUser(migratedAccount);
+                setIsLoading(false);
+                onAuthSuccess(migratedAccount);
+                return;
+              } catch {
+                savePendingProfile(null);
+              }
+            }
+
+            // Fallback se E-mail/Senha ainda não estiver habilitado no Firebase Console
+            if (code === 'auth/operation-not-allowed') {
+              const updatedLocal = mergePendingStripeIntoAccount(legacyLocal);
+              upsertLocalUser(updatedLocal);
+              setIsLoading(false);
+              onAuthSuccess(updatedLocal);
+              return;
+            }
+          }
+
+          setIsLoading(false);
+          if (code === 'auth/operation-not-allowed') {
+            setErrorMessage(
+              'O login por E-mail/Senha precisa ser ativado no Firebase Console (Authentication → Sign-in method) ou clique em "Continuar com o Google" acima.'
+            );
+          } else if (code === 'auth/too-many-requests') {
+            setErrorMessage('Muitas tentativas seguidas. Aguarde alguns instantes ou entre com o Google.');
+          } else if (
+            code === 'auth/invalid-credential' ||
+            code === 'auth/wrong-password' ||
+            code === 'auth/user-not-found'
+          ) {
+            setErrorMessage(
+              'E-mail ou senha incorretos. Se criou sua conta com o Google, clique em "Continuar com o Google".'
+            );
+          } else {
+            setErrorMessage(fbErr?.message || 'Não foi possível entrar com este e-mail.');
+          }
+          return;
+        }
+      }
+
+      // Login por WhatsApp (busca local + tenta autenticar no Firebase se tiver e-mail/senha)
+      const res = loginUser(identifier, loginPassword);
       if (res.success && res.user) {
-        onAuthSuccess(res.user);
+        let finalUser = mergePendingStripeIntoAccount(res.user);
+        if (finalUser.email && loginPassword.length >= 6) {
+          try {
+            const cred = await signInWithEmailAndPassword(
+              auth,
+              finalUser.email.toLowerCase(),
+              loginPassword
+            );
+            finalUser = { ...finalUser, id: cred.user.uid };
+            await saveUserProfileFirestore(finalUser);
+          } catch {
+            // Mantém acesso local se usuário WhatsApp ainda não tiver senha Firebase
+          }
+        }
+        upsertLocalUser(finalUser);
+        setIsLoading(false);
+        onAuthSuccess(finalUser);
       } else {
+        setIsLoading(false);
         setErrorMessage(res.error || 'E-mail, WhatsApp ou senha incorretos.');
       }
-    }, 200);
+    } catch {
+      setIsLoading(false);
+      setErrorMessage('Erro ao tentar entrar. Tente novamente.');
+    }
   };
 
   const handleRegisterSubmit = async (e: React.FormEvent) => {
@@ -383,41 +549,91 @@ export const AuthView: React.FC<AuthViewProps> = ({
       return;
     }
 
+    const cleanName = regName.trim();
+    const cleanEmail = regEmail.trim().toLowerCase();
+    const cleanPhoneDigits = regPhone.replace(/\D/g, '');
+
+    if (!cleanName) {
+      setErrorMessage('Por favor, informe seu nome completo.');
+      return;
+    }
+    if (!cleanEmail || !cleanEmail.includes('@')) {
+      setErrorMessage('Por favor, informe um e-mail válido.');
+      return;
+    }
+    if (!cleanPhoneDigits || cleanPhoneDigits.length < 10) {
+      setErrorMessage('Informe um WhatsApp com DDD válido.');
+      return;
+    }
+    if (!regPassword || regPassword.length < 6) {
+      setErrorMessage('A senha deve ter pelo menos 6 caracteres.');
+      return;
+    }
+
     setIsLoading(true);
 
     const planData = plansConfig[selectedPlan];
     const nowIso = new Date().toISOString();
+    const sevenDaysLaterIso = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+    const businessName = `Vendas de ${cleanName.split(' ')[0] || 'Rua'}`;
 
-    const res = registerUser({
-      name: regName,
-      email: regEmail,
-      phone: regPhone,
-      password: regPassword,
-      businessName: `Vendas de ${regName.split(' ')[0] || 'Rua'}`,
-      planPrice: pendingStripeCheckout.planPrice || planData.priceNumber,
-      selectedPlan: pendingStripeCheckout.plan || selectedPlan,
-      subscriptionStatus: pendingStripeCheckout.subscriptionStatus || 'active',
-      stripeCustomerId: pendingStripeCheckout.stripeCustomerId,
-      stripeSubscriptionId: pendingStripeCheckout.stripeSubscriptionId,
-      subscriptionPaidAt: nowIso,
-      subscriptionExpiresAt: pendingStripeCheckout.currentPeriodEnd,
-      trialEndsAt:
-        pendingStripeCheckout.subscriptionStatus === 'trial'
-          ? pendingStripeCheckout.currentPeriodEnd
-          : undefined,
+    // Salva dados pendentes antes do createUserWithEmailAndPassword para evitar race condition com onAuthStateChanged
+    savePendingProfile({
+      name: cleanName,
+      email: cleanEmail,
+      phone: regPhone.trim(),
+      businessName,
     });
 
-    if (res.success && res.user) {
-      try {
-        await saveUserProfileFirestore(res.user);
-      } catch (err) {
-        console.warn('Could not save user profile to Firestore immediately', err);
+    try {
+      const cred = await createUserWithEmailAndPassword(auth, cleanEmail, regPassword);
+      await updateProfile(cred.user, { displayName: cleanName }).catch(() => {});
+
+      const userAccount: UserAccount = {
+        id: cred.user.uid,
+        name: cleanName,
+        email: cleanEmail,
+        phone: regPhone.trim(),
+        businessName,
+        createdAt: nowIso,
+        trialEndsAt:
+          pendingStripeCheckout.subscriptionStatus === 'trial' &&
+          pendingStripeCheckout.currentPeriodEnd
+            ? pendingStripeCheckout.currentPeriodEnd
+            : sevenDaysLaterIso,
+        subscriptionStatus: pendingStripeCheckout.subscriptionStatus || 'active',
+        planPrice: pendingStripeCheckout.planPrice || planData.priceNumber,
+        selectedPlan: pendingStripeCheckout.plan || selectedPlan,
+        stripeCustomerId: pendingStripeCheckout.stripeCustomerId,
+        stripeSubscriptionId: pendingStripeCheckout.stripeSubscriptionId,
+        subscriptionPaidAt: nowIso,
+        subscriptionExpiresAt: pendingStripeCheckout.currentPeriodEnd,
+      };
+
+      await saveUserProfileFirestore(userAccount);
+      savePendingProfile(null);
+      upsertLocalUser(userAccount);
+      setIsLoading(false);
+      onAuthSuccess(userAccount);
+    } catch (err: any) {
+      savePendingProfile(null);
+      setIsLoading(false);
+      const code = err?.code || '';
+      if (code === 'auth/operation-not-allowed') {
+        setErrorMessage(
+          'Cadastro por E-mail/Senha ainda não foi ativado no Firebase Console (Authentication → Sign-in method). Ative lá ou clique em "Continuar com o Google" acima para concluir agora!'
+        );
+      } else if (code === 'auth/email-already-in-use') {
+        setErrorMessage(
+          'Este e-mail já está cadastrado. Clique na aba "Fazer Login" ou em "Continuar com o Google" para vincular seu plano.'
+        );
+      } else if (code === 'auth/weak-password') {
+        setErrorMessage('A senha precisa ter pelo menos 6 caracteres.');
+      } else if (code === 'auth/invalid-email') {
+        setErrorMessage('O endereço de e-mail informado é inválido.');
+      } else {
+        setErrorMessage(err?.message || 'Erro ao criar conta no Firebase. Tente novamente.');
       }
-      setIsLoading(false);
-      onAuthSuccess(res.user);
-    } else {
-      setIsLoading(false);
-      setErrorMessage(res.error || 'Erro ao criar conta.');
     }
   };
 
@@ -425,18 +641,30 @@ export const AuthView: React.FC<AuthViewProps> = ({
     setErrorMessage(null);
     setIsLoading(true);
 
+    if (regName.trim() || regPhone.trim()) {
+      savePendingProfile({
+        name: regName.trim(),
+        email: regEmail.trim().toLowerCase(),
+        phone: regPhone.trim(),
+        businessName: regName.trim()
+          ? `Vendas de ${regName.trim().split(' ')[0] || 'Rua'}`
+          : '',
+      });
+    }
+
     try {
       const result = await signInWithPopup(auth, googleProvider);
       const fbUser = result.user;
       const cleanEmail = (fbUser.email || '').trim().toLowerCase();
-      const cleanName = fbUser.displayName || cleanEmail.split('@')[0] || 'Vendedor';
+      const cleanName =
+        fbUser.displayName || regName.trim() || cleanEmail.split('@')[0] || 'Vendedor';
 
       let userAccount = await getUserProfileFirestore(fbUser.uid);
 
-      if (!userAccount) {
-        const localUsers = getRegisteredUsers();
-        const existingLocal = localUsers.find((u) => u.email.toLowerCase() === cleanEmail);
+      const localUsers = getRegisteredUsers();
+      const existingLocal = localUsers.find((u) => u.email.toLowerCase() === cleanEmail);
 
+      if (!userAccount) {
         const now = new Date();
         const sevenDaysLater = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
         const planData = plansConfig[selectedPlan];
@@ -445,7 +673,7 @@ export const AuthView: React.FC<AuthViewProps> = ({
           id: fbUser.uid,
           name: cleanName,
           email: cleanEmail,
-          phone: fbUser.phoneNumber || existingLocal?.phone || '',
+          phone: regPhone.trim() || fbUser.phoneNumber || existingLocal?.phone || '',
           businessName: existingLocal?.businessName || `Vendas de ${cleanName.split(' ')[0]}`,
           createdAt: existingLocal?.createdAt || now.toISOString(),
           trialEndsAt:
@@ -471,25 +699,21 @@ export const AuthView: React.FC<AuthViewProps> = ({
             pendingStripeCheckout?.currentPeriodEnd ||
             existingLocal?.subscriptionExpiresAt,
         };
-
-        await saveUserProfileFirestore(userAccount);
-      } else if (pendingStripeCheckout) {
+      } else {
         userAccount = {
           ...userAccount,
-          subscriptionStatus: pendingStripeCheckout.subscriptionStatus || 'active',
-          stripeCustomerId:
-            pendingStripeCheckout.stripeCustomerId || userAccount.stripeCustomerId,
-          stripeSubscriptionId:
-            pendingStripeCheckout.stripeSubscriptionId ||
-            userAccount.stripeSubscriptionId,
-          selectedPlan: pendingStripeCheckout.plan || userAccount.selectedPlan,
-          planPrice: pendingStripeCheckout.planPrice || userAccount.planPrice,
-          subscriptionPaidAt: new Date().toISOString(),
-          subscriptionExpiresAt:
-            pendingStripeCheckout.currentPeriodEnd || userAccount.subscriptionExpiresAt,
+          name: userAccount.name || cleanName,
+          email: userAccount.email || cleanEmail,
+          phone: userAccount.phone || regPhone.trim() || fbUser.phoneNumber || existingLocal?.phone || '',
         };
-        await saveUserProfileFirestore(userAccount);
+        if (pendingStripeCheckout) {
+          userAccount = mergePendingStripeIntoAccount(userAccount);
+        }
       }
+
+      // Garante persistência no Firestore /users/{uid} em TODO login Google
+      await saveUserProfileFirestore(userAccount);
+      savePendingProfile(null);
 
       const users = getRegisteredUsers();
       const idx = users.findIndex((u) => u.id === userAccount!.id || u.email.toLowerCase() === cleanEmail);
@@ -504,6 +728,7 @@ export const AuthView: React.FC<AuthViewProps> = ({
       setIsLoading(false);
       onAuthSuccess(userAccount);
     } catch (err: any) {
+      savePendingProfile(null);
       setIsLoading(false);
       console.error('Google Auth Error:', err);
       if (err.code === 'auth/popup-closed-by-user') {
@@ -588,7 +813,7 @@ export const AuthView: React.FC<AuthViewProps> = ({
               </div>
 
               <h1 className="font-display text-3xl sm:text-5xl font-extrabold text-slate-900 tracking-tight leading-[1.12] text-balance">
-                Controle suas vendas, seu Pix e seu fiado sem caderno de papel.
+                Controle suas vendas, seu Pix e suas vendas a prazo sem caderno de papel.
               </h1>
 
               <p className="text-base sm:text-lg text-slate-600 leading-relaxed max-w-xl">
@@ -888,7 +1113,7 @@ export const AuthView: React.FC<AuthViewProps> = ({
                 Custo-benefício na ponta do lápis
               </div>
               <h2 className="font-display text-2xl sm:text-3xl font-extrabold tracking-tight text-balance">
-                Menos que um cafezinho por semana para nunca mais perder um fiado.
+                Menos que um cafezinho por semana para nunca mais perder um pagamento a prazo.
               </h2>
               <p className="text-sm text-slate-300 leading-relaxed max-w-xl">
                 Arraste a barra ao lado para ver quanto você movimenta por mês e como o investimento mensal de R$ 15,97 representa praticamente zero perto do seu faturamento.
@@ -1560,7 +1785,8 @@ export const AuthView: React.FC<AuthViewProps> = ({
                   <input
                     type="password"
                     required
-                    placeholder="Mínimo 4 dígitos"
+                    minLength={6}
+                    placeholder="Mínimo 6 caracteres"
                     value={regPassword}
                     onChange={(e) => setRegPassword(e.target.value)}
                     className="w-full pl-9 pr-10 py-2.5 rounded-xl bg-white border border-slate-300 text-slate-900 text-xs focus:outline-none focus:border-emerald-500 font-medium"

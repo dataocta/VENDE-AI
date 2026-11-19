@@ -148,7 +148,7 @@ export const SaleSuccessModal: React.FC<SaleSuccessModalProps> = ({
               }}
               className="min-h-[44px] rounded-xl bg-slate-900 hover:bg-black text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-colors touch-press shadow-xs"
             >
-              <span>Nova Venda</span>
+              <span>Nova Entrada</span>
               <ArrowRight className="w-4 h-4" />
             </button>
           </div>

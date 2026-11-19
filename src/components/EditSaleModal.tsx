@@ -165,7 +165,7 @@ export const EditSaleModal: React.FC<EditSaleModalProps> = ({
                 <option value="dinheiro">Dinheiro Físico</option>
                 <option value="cartao_debito">Cartão de Débito</option>
                 <option value="cartao_credito">Cartão de Crédito</option>
-                <option value="fiado">Venda a Prazo (Fiado / Notinha)</option>
+                <option value="fiado">Venda a Prazo (Notinha)</option>
               </select>
               <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-emerald-600">
                 {paymentMethod === 'pix' && <QrCode className="w-4 h-4" />}
@@ -184,7 +184,7 @@ export const EditSaleModal: React.FC<EditSaleModalProps> = ({
           <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3 space-y-2">
             <span className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
               <User className="w-3.5 h-3.5 text-emerald-600" />
-              <span>Cliente (Opcional ou obrigatório se fiado)</span>
+              <span>Cliente (Opcional ou obrigatório se a prazo)</span>
             </span>
             <div className="grid grid-cols-2 gap-2">
               <input

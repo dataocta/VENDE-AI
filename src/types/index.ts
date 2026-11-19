@@ -40,7 +40,7 @@ export interface Sale {
   customerId?: string;
   notes?: string;
   status: 'concluida' | 'cancelada';
-  entryType?: 'venda' | 'estorno' | 'servico' | 'aporte' | 'outro' | string;
+  entryType?: 'venda' | 'estorno' | 'servico' | 'aporte' | 'recebimento_fiado' | 'outro' | string;
   category?: string;
 }
 
