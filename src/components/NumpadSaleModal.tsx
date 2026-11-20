@@ -64,7 +64,15 @@ export const NumpadSaleModal: React.FC<NumpadSaleModalProps> = ({
 
   // Amount entered as integer cents (e.g. 1550 = R$ 15,50)
   const [cents, setCents] = useState<number>(0);
+  const centsRef = useRef<number>(0);
+  const setCentsSync = (updater: number | ((prev: number) => number)) => {
+    const next = typeof updater === 'function' ? updater(centsRef.current) : updater;
+    centsRef.current = next;
+    setCents(next);
+  };
   const [selectedQuickProduct, setSelectedQuickProduct] = useState<Product | null>(null);
+  const [quickProductQty, setQuickProductQty] = useState<number>(1);
+  const [quickProductQtyInput, setQuickProductQtyInput] = useState<string>('1');
 
   // Catalog cart quantities: productId -> quantity
   const [catalogCart, setCatalogCart] = useState<Record<string, number>>({});
@@ -87,9 +95,6 @@ export const NumpadSaleModal: React.FC<NumpadSaleModalProps> = ({
   const [newCustName, setNewCustName] = useState('');
   const [newCustPhone, setNewCustPhone] = useState('');
   const [newCustAddress, setNewCustAddress] = useState('');
-
-  // Description / Extra info expandable toggle
-  const [showExtraOptions, setShowExtraOptions] = useState(false);
 
   // Entry category options
   const entryCategories: {
@@ -168,9 +173,11 @@ export const NumpadSaleModal: React.FC<NumpadSaleModalProps> = ({
     setModalStep('choose');
     setEntryFlowMode('venda');
     setSaleMode('numpad');
-    setCents(0);
+    setCentsSync(0);
     setReceivedCents(0);
     setSelectedQuickProduct(null);
+    setQuickProductQty(1);
+    setQuickProductQtyInput('1');
     setCatalogCart({});
     setDescription('');
     setFormError(null);
@@ -182,7 +189,6 @@ export const NumpadSaleModal: React.FC<NumpadSaleModalProps> = ({
     setPaymentMethod('pix');
     setIsCustomerSelectorOpen(false);
     setIsCreatingNewCustomer(false);
-    setShowExtraOptions(false);
   };
 
   useEffect(() => {
@@ -194,6 +200,9 @@ export const NumpadSaleModal: React.FC<NumpadSaleModalProps> = ({
 
   const handleChooseSaleFlow = () => {
     if (soundEnabled) playTapBeep();
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
     setEntryFlowMode('venda');
     setEntryCategory('venda');
     setSaleMode('numpad');
@@ -203,10 +212,15 @@ export const NumpadSaleModal: React.FC<NumpadSaleModalProps> = ({
 
   const handleChooseOtherEntryFlow = (cat: EntryCategoryType = 'aporte') => {
     if (soundEnabled) playTapBeep();
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
     setEntryFlowMode('other');
     setEntryCategory(cat);
     setSaleMode('numpad');
     setSelectedQuickProduct(null);
+    setQuickProductQty(1);
+    setQuickProductQtyInput('1');
     setCatalogCart({});
     if (paymentMethod === 'fiado') {
       setPaymentMethod('dinheiro');
@@ -218,40 +232,54 @@ export const NumpadSaleModal: React.FC<NumpadSaleModalProps> = ({
   // Numpad key handlers
   const handleDigit = (digit: string) => {
     if (soundEnabled) playTapBeep();
-    if (cents.toString().length >= 8) return;
-    const nextStr = (cents === 0 ? '' : cents.toString()) + digit;
-    setCents(parseInt(nextStr || '0', 10));
-    setSelectedQuickProduct(null);
+    setCentsSync((prev) => {
+      if (prev.toString().length >= 8) return prev;
+      const nextStr = (prev === 0 ? '' : prev.toString()) + digit;
+      const parsed = parseInt(nextStr || '0', 10);
+      return Number.isNaN(parsed) ? prev : parsed;
+    });
   };
 
   const handleClear = () => {
     if (soundEnabled) playTapBeep();
-    setCents(0);
+    setCentsSync(0);
     setReceivedCents(0);
-    setSelectedQuickProduct(null);
   };
 
   const handleBackspace = () => {
     if (soundEnabled) playTapBeep();
-    const str = cents.toString();
-    if (str.length <= 1) {
-      setCents(0);
-      setSelectedQuickProduct(null);
-    } else {
-      setCents(parseInt(str.slice(0, -1), 10));
-    }
+    setCentsSync((prev) => {
+      const str = prev.toString();
+      if (str.length <= 1) {
+        return 0;
+      }
+      const parsed = parseInt(str.slice(0, -1), 10);
+      return Number.isNaN(parsed) ? 0 : parsed;
+    });
   };
 
   const handleAddQuick = (val: number) => {
     if (soundEnabled) playTapBeep();
-    setCents((prev) => prev + val * 100);
+    setCentsSync((prev) => prev + val * 100);
   };
 
   const handleSelectQuickProduct = (prod: Product) => {
     if (soundEnabled) playTapBeep();
     setSelectedQuickProduct(prod);
-    setCents(Math.round(prod.price * 100));
+    setQuickProductQty(1);
+    setQuickProductQtyInput('1');
+    setCentsSync(Math.round(prod.price * 100));
     setDescription(prod.name);
+  };
+
+  const handleChangeQuickProductQty = (nextQty: number, silent?: boolean) => {
+    const safeQty = Math.max(1, Math.min(9999, Math.floor(nextQty) || 1));
+    if (soundEnabled && !silent) playTapBeep();
+    setQuickProductQty(safeQty);
+    setQuickProductQtyInput(String(safeQty));
+    if (selectedQuickProduct) {
+      setCentsSync(Math.round(selectedQuickProduct.price * 100) * safeQty);
+    }
   };
 
   const handleSelectCashBill = (bill: number) => {
@@ -314,77 +342,16 @@ export const NumpadSaleModal: React.FC<NumpadSaleModalProps> = ({
     setNewCustAddress('');
   };
 
-  // PC Keyboard physical listener
-  useEffect(() => {
-    if (!isOpen) return;
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // If user is currently typing in an input or textarea (search, customer form, etc.), let the input handle it
-      const target = e.target as HTMLElement | null;
-      const isInput =
-        target &&
-        (target.tagName === 'INPUT' ||
-          target.tagName === 'TEXTAREA' ||
-          target.tagName === 'SELECT');
-
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        if (isCustomerSelectorOpen) {
-          setIsCustomerSelectorOpen(false);
-        } else {
-          resetAllState();
-          onClose();
-        }
-        return;
-      }
-
-      // Only capture numpad digits when in 'entry' step
-      if (modalStep !== 'entry') return;
-
-      // If user is typing in a text field, do not capture numpad digits
-      if (isInput) return;
-
-      if (e.key >= '0' && e.key <= '9') {
-        e.preventDefault();
-        handleDigit(e.key);
-      } else if (e.key === 'Backspace') {
-        e.preventDefault();
-        handleBackspace();
-      } else if (e.key === 'c' || e.key === 'C' || e.key === 'Delete') {
-        e.preventDefault();
-        handleClear();
-      } else if (e.key === 'Enter') {
-        e.preventDefault();
-        if (totalAmount > 0) {
-          handleSubmitDirect();
-        }
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [
-    isOpen,
-    modalStep,
-    cents,
-    totalAmount,
-    paymentMethod,
-    customerName,
-    saleMode,
-    catalogCart,
-    isCustomerSelectorOpen,
-    entryCategory,
-    description,
-    customerPhone,
-    customerId,
-    changeGiven,
-    amountReceived,
-  ]);
-
   // Submit sale function
   const handleSubmitDirect = () => {
     setFormError(null);
-    if (totalAmount <= 0) return;
+    const effectiveTotal = saleMode === 'catalog' ? catalogTotal : centsRef.current / 100;
+    const effectiveChangeGiven =
+      paymentMethod === 'dinheiro' && amountReceived > effectiveTotal
+        ? amountReceived - effectiveTotal
+        : 0;
+
+    if (effectiveTotal <= 0) return;
 
     if (paymentMethod === 'fiado' && !customerName.trim()) {
       setFormError('Para venda a prazo, selecione ou informe o cliente!');
@@ -423,6 +390,8 @@ export const NumpadSaleModal: React.FC<NumpadSaleModalProps> = ({
     } else {
       // Numpad manual or quick selected product
       let defaultItemName = 'Venda Registrada';
+      const qty = selectedQuickProduct ? Math.max(1, quickProductQty) : 1;
+
       if (entryCategory === 'estorno') {
         defaultItemName = 'Estorno / Devolução';
         calculatedCost = 0; // Estorno has 0 cost of goods sold
@@ -438,8 +407,8 @@ export const NumpadSaleModal: React.FC<NumpadSaleModalProps> = ({
       } else {
         const itemCost =
           selectedQuickProduct && selectedQuickProduct.costPrice
-            ? selectedQuickProduct.costPrice
-            : totalAmount * 0.45;
+            ? selectedQuickProduct.costPrice * qty
+            : effectiveTotal * 0.45;
         calculatedCost = itemCost;
       }
 
@@ -451,10 +420,10 @@ export const NumpadSaleModal: React.FC<NumpadSaleModalProps> = ({
         {
           ...(selectedQuickProduct ? { productId: selectedQuickProduct.id } : {}),
           name: itemName,
-          quantity: 1,
-          unitPrice: totalAmount,
-          subtotal: totalAmount,
-          costPrice: calculatedCost,
+          quantity: qty,
+          unitPrice: Number((effectiveTotal / qty).toFixed(2)),
+          subtotal: effectiveTotal,
+          costPrice: selectedQuickProduct?.costPrice ?? Number(((effectiveTotal / qty) * 0.45).toFixed(2)),
         },
       ];
     }
@@ -464,14 +433,14 @@ export const NumpadSaleModal: React.FC<NumpadSaleModalProps> = ({
       code: saleCode,
       date: new Date().toISOString(),
       items: saleItems,
-      totalAmount,
+      totalAmount: effectiveTotal,
       totalCost: calculatedCost,
       paymentMethod,
       amountReceived:
         paymentMethod === 'dinheiro' && amountReceived > 0
           ? amountReceived
-          : totalAmount,
-      changeGiven: paymentMethod === 'dinheiro' ? changeGiven : 0,
+          : effectiveTotal,
+      changeGiven: paymentMethod === 'dinheiro' ? effectiveChangeGiven : 0,
       customerName: customerName.trim() || undefined,
       customerPhone: customerPhone.trim() || undefined,
       customerId: customerId || undefined,
@@ -491,6 +460,83 @@ export const NumpadSaleModal: React.FC<NumpadSaleModalProps> = ({
     onCompleteSale(newSale);
     resetAllState();
   };
+
+  const latestKeyRef = useRef({
+    modalStep,
+    isCustomerSelectorOpen,
+    saleMode,
+    catalogTotal,
+    handleDigit,
+    handleBackspace,
+    handleClear,
+    handleSubmitDirect,
+    resetAllState,
+    onClose,
+    setIsCustomerSelectorOpen,
+  });
+  latestKeyRef.current = {
+    modalStep,
+    isCustomerSelectorOpen,
+    saleMode,
+    catalogTotal,
+    handleDigit,
+    handleBackspace,
+    handleClear,
+    handleSubmitDirect,
+    resetAllState,
+    onClose,
+    setIsCustomerSelectorOpen,
+  };
+
+  // PC Keyboard physical listener (estável enquanto aberto para nunca perder dígitos rápidos)
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const ctx = latestKeyRef.current;
+      const target = e.target as HTMLElement | null;
+      const isInput =
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.tagName === 'SELECT');
+
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        if (ctx.isCustomerSelectorOpen) {
+          ctx.setIsCustomerSelectorOpen(false);
+        } else {
+          ctx.resetAllState();
+          ctx.onClose();
+        }
+        return;
+      }
+
+      if (ctx.modalStep !== 'entry') return;
+      if (isInput) return;
+
+      if (e.key >= '0' && e.key <= '9') {
+        e.preventDefault();
+        ctx.handleDigit(e.key);
+      } else if (e.key === 'Backspace') {
+        e.preventDefault();
+        ctx.handleBackspace();
+      } else if (e.key === 'c' || e.key === 'C' || e.key === 'Delete') {
+        e.preventDefault();
+        ctx.handleClear();
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        const currentTotal =
+          ctx.saleMode === 'catalog' ? ctx.catalogTotal : centsRef.current / 100;
+        if (currentTotal > 0) {
+          ctx.handleSubmitDirect();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -690,6 +736,9 @@ export const NumpadSaleModal: React.FC<NumpadSaleModalProps> = ({
                     type="button"
                     onClick={() => {
                       if (soundEnabled) playTapBeep();
+                      if (selectedQuickProduct && Object.keys(catalogCart).length === 0) {
+                        setCatalogCart({ [selectedQuickProduct.id]: 1 });
+                      }
                       setSaleMode('catalog');
                     }}
                     className={`py-1.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all relative ${
@@ -699,7 +748,7 @@ export const NumpadSaleModal: React.FC<NumpadSaleModalProps> = ({
                     }`}
                   >
                     <ShoppingBag className="w-3.5 h-3.5" />
-                    <span>Itens Cadastrados ({products.length})</span>
+                    <span>Catálogo / Vários Itens ({products.length})</span>
                     {catalogItemsCount > 0 && (
                       <span className="w-4 h-4 rounded-full bg-emerald-600 text-white text-[10px] font-black flex items-center justify-center ml-0.5">
                         {catalogItemsCount}
@@ -756,7 +805,193 @@ export const NumpadSaleModal: React.FC<NumpadSaleModalProps> = ({
                 </div>
               </div>
 
-              {/* TECLADO NUMÉRICO PROEMINENTE (IMMEDIATELY VISIBLE) */}
+              {/* Produto Cadastrado / Descrição (sempre visível) */}
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-2xl space-y-2">
+                <div className="flex items-center justify-between gap-2 text-xs font-bold text-slate-700">
+                  <span className="flex items-center gap-1.5">
+                    <ShoppingBag className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>
+                      {entryFlowMode === 'other'
+                        ? 'Descrição / Motivo da Entrada'
+                        : 'Produto Vendido (Opcional)'}
+                    </span>
+                  </span>
+
+                  {entryFlowMode === 'venda' && products.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (soundEnabled) playTapBeep();
+                        if (selectedQuickProduct && Object.keys(catalogCart).length === 0) {
+                          setCatalogCart({ [selectedQuickProduct.id]: quickProductQty });
+                        }
+                        setSaleMode('catalog');
+                      }}
+                      className="text-[11px] font-bold text-emerald-700 hover:underline shrink-0"
+                    >
+                      Vários itens →
+                    </button>
+                  )}
+                </div>
+
+                {entryFlowMode === 'venda' && products.length > 0 && (
+                  <>
+                    <div className="relative">
+                      <select
+                        value={selectedQuickProduct?.id || ''}
+                        onChange={(e) => {
+                          const prod = products.find((p) => p.id === e.target.value);
+                          if (prod) {
+                            handleSelectQuickProduct(prod);
+                          } else {
+                            setSelectedQuickProduct(null);
+                            setQuickProductQty(1);
+                            setQuickProductQtyInput('1');
+                            if (description && products.some((p) => p.name === description)) {
+                              setDescription('');
+                            }
+                          }
+                        }}
+                        className="w-full h-10 pl-3 pr-9 rounded-xl bg-white border border-slate-300 text-slate-900 text-xs font-bold focus:outline-none focus:border-emerald-500 appearance-none cursor-pointer"
+                      >
+                        <option value="">Selecionar produto cadastrado...</option>
+                        {products.map((prod) => (
+                          <option key={prod.id} value={prod.id}>
+                            {prod.name} — {formatCurrency(prod.price)}
+                          </option>
+                        ))}
+                      </select>
+                      <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3 text-slate-400">
+                        <ChevronDown className="w-4 h-4" />
+                      </div>
+                    </div>
+
+                    {/* Controle de Quantidade quando um produto cadastrado está selecionado */}
+                    {selectedQuickProduct && (
+                      <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-2.5 flex items-center justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="text-xs font-extrabold text-emerald-950 truncate">
+                            {selectedQuickProduct.name}
+                          </div>
+                          <div className="text-[11px] text-emerald-700 font-semibold font-mono-numbers">
+                            {formatCurrency(selectedQuickProduct.price)} × {quickProductQty} ={' '}
+                            <strong className="text-emerald-900">
+                              {formatCurrency(selectedQuickProduct.price * quickProductQty)}
+                            </strong>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <div className="flex items-center bg-white rounded-xl border border-emerald-300 p-0.5 shadow-2xs">
+                            <button
+                              type="button"
+                              onClick={() => handleChangeQuickProductQty(quickProductQty - 1)}
+                              disabled={quickProductQty <= 1}
+                              className="w-7 h-7 rounded-lg bg-emerald-50 hover:bg-emerald-100 disabled:opacity-40 text-emerald-800 flex items-center justify-center font-bold"
+                              title="Diminuir quantidade"
+                            >
+                              <Minus className="w-3.5 h-3.5" />
+                            </button>
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              value={quickProductQtyInput}
+                              onFocus={(e) => e.target.select()}
+                              onChange={(e) => {
+                                const raw = e.target.value.replace(/\D/g, '').slice(0, 4);
+                                setQuickProductQtyInput(raw);
+                                if (raw !== '') {
+                                  const val = parseInt(raw, 10);
+                                  if (!Number.isNaN(val) && val >= 1) {
+                                    handleChangeQuickProductQty(val, true);
+                                  }
+                                }
+                              }}
+                              onBlur={() => {
+                                if (!quickProductQtyInput || parseInt(quickProductQtyInput, 10) < 1) {
+                                  handleChangeQuickProductQty(1, true);
+                                }
+                              }}
+                              aria-label="Quantidade do produto"
+                              className="w-10 text-center font-extrabold text-xs text-emerald-950 font-mono-numbers bg-transparent focus:outline-none"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => handleChangeQuickProductQty(quickProductQty + 1)}
+                              className="w-7 h-7 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white flex items-center justify-center font-bold"
+                              title="Aumentar quantidade"
+                            >
+                              <Plus className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (description === selectedQuickProduct.name) {
+                                setDescription('');
+                              }
+                              setSelectedQuickProduct(null);
+                              setQuickProductQty(1);
+                              setQuickProductQtyInput('1');
+                              setCentsSync(0);
+                            }}
+                            title="Remover seleção do produto"
+                            className="w-7 h-7 rounded-lg bg-white border border-slate-200 text-slate-400 hover:text-rose-600 flex items-center justify-center"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Quick products chips */}
+                    <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+                      {products.slice(0, 8).map((prod) => {
+                        const isSelected = selectedQuickProduct?.id === prod.id;
+                        return (
+                          <button
+                            key={prod.id}
+                            type="button"
+                            onClick={() => handleSelectQuickProduct(prod)}
+                            className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border shrink-0 transition-all ${
+                              isSelected
+                                ? 'bg-emerald-600 text-white border-emerald-600'
+                                : 'bg-white border-slate-200 text-slate-800 hover:border-emerald-400'
+                            }`}
+                          >
+                            <span>{prod.name}</span>
+                            <span className="ml-1 opacity-80">({formatCurrency(prod.price)})</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
+
+                <input
+                  type="text"
+                  placeholder={
+                    entryFlowMode === 'other'
+                      ? 'Ex: Troco inicial, entrega avulsa, reembolso...'
+                      : products.length > 0
+                      ? 'Ou digite um produto / observação avulsa...'
+                      : 'Nome do produto ou observação (opcional)...'
+                  }
+                  value={description}
+                  onChange={(e) => {
+                    setDescription(e.target.value);
+                    if (selectedQuickProduct && e.target.value !== selectedQuickProduct.name) {
+                      setSelectedQuickProduct(null);
+                      setQuickProductQty(1);
+                      setQuickProductQtyInput('1');
+                    }
+                  }}
+                  className="w-full px-3 py-2 rounded-xl bg-white border border-slate-300 text-slate-900 text-xs focus:outline-none focus:border-emerald-500 font-medium"
+                />
+              </div>
+
+              {/* TECLADO NUMÉRICO PROEMINENTE */}
               <div className="grid grid-cols-3 gap-2">
                 {['1', '2', '3', '4', '5', '6', '7', '8', '9', 'C', '0', '⌫'].map((key) => {
                   const isClear = key === 'C';
@@ -771,7 +1006,7 @@ export const NumpadSaleModal: React.FC<NumpadSaleModalProps> = ({
                         else if (isBack) handleBackspace();
                         else handleDigit(key);
                       }}
-                      className={`min-h-[50px] sm:min-h-[52px] rounded-2xl font-black text-xl flex items-center justify-center transition-all touch-press ${
+                      className={`min-h-[46px] sm:min-h-[50px] rounded-2xl font-black text-xl flex items-center justify-center transition-all touch-press ${
                         isClear
                           ? 'bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100 active:scale-95'
                           : isBack
@@ -783,80 +1018,6 @@ export const NumpadSaleModal: React.FC<NumpadSaleModalProps> = ({
                     </button>
                   );
                 })}
-              </div>
-
-              {/* Collapsible: Vincular produto rápido ou descrição (sempre visível em Outra Entrada) */}
-              <div className="pt-1">
-                {entryFlowMode === 'venda' && !showExtraOptions ? (
-                  <button
-                    type="button"
-                    onClick={() => setShowExtraOptions(true)}
-                    className="w-full py-1.5 text-center text-xs font-semibold text-emerald-700 hover:underline flex items-center justify-center gap-1"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>Adicionar descrição ou selecionar produto específico</span>
-                  </button>
-                ) : (
-                  <div className="p-3 bg-slate-50 border border-slate-200 rounded-2xl space-y-2 animate-in fade-in duration-150">
-                    <div className="flex items-center justify-between text-xs font-semibold text-slate-700">
-                      <span>
-                        {entryFlowMode === 'other'
-                          ? 'Descrição / Motivo da Entrada:'
-                          : 'Descrição / Produto Específico:'}
-                      </span>
-                      {entryFlowMode === 'venda' && (
-                        <button
-                          type="button"
-                          onClick={() => setShowExtraOptions(false)}
-                          className="text-slate-400 hover:text-slate-600 text-[11px]"
-                        >
-                          Recolher
-                        </button>
-                      )}
-                    </div>
-
-                    <input
-                      type="text"
-                      placeholder={
-                        entryFlowMode === 'other'
-                          ? 'Ex: Troco inicial, entrega avulsa, reembolso...'
-                          : 'Ex: Pastel de Carne, Refrigerante 2L, Reparo...'
-                      }
-                      value={description}
-                      onChange={(e) => {
-                        setDescription(e.target.value);
-                        if (selectedQuickProduct && e.target.value !== selectedQuickProduct.name) {
-                          setSelectedQuickProduct(null);
-                        }
-                      }}
-                      className="w-full px-3 py-2 rounded-xl bg-white border border-slate-300 text-slate-900 text-xs focus:outline-none focus:border-emerald-500 font-medium"
-                    />
-
-                    {/* Quick products chips (apenas no fluxo de Venda) */}
-                    {entryFlowMode === 'venda' && products.length > 0 && (
-                      <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1">
-                        {products.slice(0, 8).map((prod) => {
-                          const isSelected = selectedQuickProduct?.id === prod.id;
-                          return (
-                            <button
-                              key={prod.id}
-                              type="button"
-                              onClick={() => handleSelectQuickProduct(prod)}
-                              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border shrink-0 transition-all ${
-                                isSelected
-                                  ? 'bg-emerald-600 text-white border-emerald-600'
-                                  : 'bg-white border-slate-200 text-slate-800 hover:border-emerald-400'
-                              }`}
-                            >
-                              <span>{prod.name}</span>
-                              <span className="ml-1 opacity-80">({formatCurrency(prod.price)})</span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                )}
               </div>
             </div>
           )}

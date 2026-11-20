@@ -67,9 +67,10 @@ export const CashView: React.FC<CashViewProps> = ({
   const [isEditingOpening, setIsEditingOpening] = useState(false);
   const [openingStr, setOpeningStr] = useState(register.openingBalance.toString());
 
-  // Editing state for lancamentos (Vendas e Despesas)
+  // Editing & deleting state for lancamentos (Vendas e Despesas)
   const [editingSale, setEditingSale] = useState<Sale | null>(null);
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
+  const [deletingTxId, setDeletingTxId] = useState<string | null>(null);
   const [viewSubTab, setViewSubTab] = useState<'resumo' | 'lancamentos'>('resumo');
   const [lancamentoFilterType, setLancamentoFilterType] = useState<'todos' | 'vendas' | 'despesas'>('todos');
   const [lancamentoSearch, setLancamentoSearch] = useState('');
@@ -928,44 +929,68 @@ export const CashView: React.FC<CashViewProps> = ({
                     </div>
                   </div>
 
-                  {/* Action Buttons: Editar & Excluir */}
-                  <div className="pt-2.5 border-t border-slate-100 flex items-center justify-end gap-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const confirmMsg =
-                          tx.type === 'venda'
-                            ? 'Tem certeza que deseja excluir esta venda? Se houver produtos de catálogo, as quantidades voltarão ao estoque.'
-                            : 'Tem certeza que deseja excluir esta despesa?';
-                        if (window.confirm(confirmMsg)) {
-                          if (tx.type === 'venda' && onDeleteSale) {
-                            onDeleteSale(tx.sale.id);
-                          } else if (tx.type === 'despesa' && onDeleteExpense) {
-                            onDeleteExpense(tx.expense.id);
-                          }
-                        }
-                      }}
-                      className="px-3 py-1.5 rounded-xl text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 flex items-center gap-1.5 transition-colors"
-                    >
-                      <Trash2 className="w-3.5 h-3.5 text-rose-600" />
-                      <span>Excluir</span>
-                    </button>
+                  {/* Action Buttons: Editar & Excluir (com confirmação inline compatível com iframe) */}
+                  {deletingTxId === tx.id ? (
+                    <div className="pt-2.5 border-t border-slate-100">
+                      <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-rose-900">
+                        <span className="font-semibold">
+                          {tx.type === 'venda'
+                            ? 'Confirmar exclusão? Itens de catálogo voltam ao estoque.'
+                            : 'Confirmar exclusão desta despesa?'}
+                        </span>
+                        <div className="flex items-center justify-end gap-1.5 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (tx.type === 'venda' && onDeleteSale) {
+                                onDeleteSale(tx.sale.id);
+                              } else if (tx.type === 'despesa' && onDeleteExpense) {
+                                onDeleteExpense(tx.expense.id);
+                              }
+                              setDeletingTxId(null);
+                            }}
+                            className="px-3 py-1.5 rounded-lg bg-rose-600 text-white font-bold hover:bg-rose-700 transition-colors"
+                          >
+                            Confirmar
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setDeletingTxId(null)}
+                            className="px-3 py-1.5 rounded-lg bg-slate-200 text-slate-700 font-bold hover:bg-slate-300 transition-colors"
+                          >
+                            Cancelar
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="pt-2.5 border-t border-slate-100 flex items-center justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setDeletingTxId(tx.id)}
+                        className="px-3 py-1.5 rounded-xl text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 flex items-center gap-1.5 transition-colors"
+                      >
+                        <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                        <span>Excluir</span>
+                      </button>
 
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (tx.type === 'venda') {
-                          setEditingSale(tx.sale);
-                        } else {
-                          setEditingExpense(tx.expense);
-                        }
-                      }}
-                      className="px-3.5 py-1.5 rounded-xl text-xs font-bold text-white bg-slate-900 hover:bg-slate-800 flex items-center gap-1.5 transition-colors shadow-xs"
-                    >
-                      <Edit className="w-3.5 h-3.5" />
-                      <span>Editar</span>
-                    </button>
-                  </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setDeletingTxId(null);
+                          if (tx.type === 'venda') {
+                            setEditingSale(tx.sale);
+                          } else {
+                            setEditingExpense(tx.expense);
+                          }
+                        }}
+                        className="px-3.5 py-1.5 rounded-xl text-xs font-bold text-white bg-slate-900 hover:bg-slate-800 flex items-center gap-1.5 transition-colors shadow-xs"
+                      >
+                        <Edit className="w-3.5 h-3.5" />
+                        <span>Editar</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

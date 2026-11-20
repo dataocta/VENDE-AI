@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Zap,
   Trash2,
@@ -25,6 +25,7 @@ interface PosViewProps {
   settings: BusinessSettings;
   onCompleteSale: (sale: Sale) => void;
   onCancelSale: (saleId: string) => void;
+  onDeleteSale?: (saleId: string) => void;
   onOpenNumpadSale: () => void;
   onOpenNewExpense?: () => void;
   onOpenPaymentModal?: (debt: CustomerDebt) => void;
@@ -38,11 +39,13 @@ export const PosView: React.FC<PosViewProps> = ({
   debts = [],
   settings,
   onCancelSale,
+  onDeleteSale,
   onOpenNumpadSale,
   onOpenNewExpense,
   onOpenPaymentModal,
   onNavigateToTab,
 }) => {
+  const [deletingSaleId, setDeletingSaleId] = useState<string | null>(null);
   // Today's stats calculation: Saldo recebido no caixa EXCLUI vendas fiado ainda não pagas
   const todayStr = new Date().toISOString().split('T')[0];
   const todayEntries = sales.filter((s) => s.status === 'concluida' && s.date.startsWith(todayStr));
@@ -276,68 +279,103 @@ export const PosView: React.FC<PosViewProps> = ({
                 ? s.category
                 : null;
 
+              const isDeleting = deletingSaleId === s.id;
+
               return (
                 <div
                   key={s.id}
-                  className="bg-white border border-slate-200 rounded-2xl p-3 flex items-center justify-between gap-3 shadow-xs"
+                  className="bg-white border border-slate-200 rounded-2xl p-3 space-y-2 shadow-xs"
                 >
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className="font-extrabold text-sm text-slate-900 font-mono-numbers">
-                        {formatCurrency(s.totalAmount)}
-                      </span>
-                      {badgeText && (
-                        <span
-                          className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${
-                            isFiadoPay
-                              ? 'bg-teal-100 text-teal-800 border border-teal-200'
-                              : s.entryType === 'estorno' || s.category === 'Estorno'
-                              ? 'bg-purple-100 text-purple-800 border border-purple-200'
-                              : s.entryType === 'servico'
-                              ? 'bg-blue-100 text-blue-800 border border-blue-200'
-                              : 'bg-amber-100 text-amber-800 border border-amber-200'
-                          }`}
-                        >
-                          {badgeText}
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="font-extrabold text-sm text-slate-900 font-mono-numbers">
+                          {formatCurrency(s.totalAmount)}
                         </span>
-                      )}
-                      <span className="text-xs text-emerald-700 font-medium bg-emerald-50 px-2 py-0.5 rounded-md">
-                        {getPaymentMethodLabel(s.paymentMethod)}
-                      </span>
-                    </div>
-                    <div className="text-xs text-slate-500 truncate mt-0.5">
-                      {s.items.map((i) => `${i.quantity}x ${i.name}`).join(', ')}
-                    </div>
-                    {s.customerName && (
-                      <div className="text-[11px] text-slate-500 font-medium">
-                        Cliente: {s.customerName}
+                        {badgeText && (
+                          <span
+                            className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${
+                              isFiadoPay
+                                ? 'bg-teal-100 text-teal-800 border border-teal-200'
+                                : s.entryType === 'estorno' || s.category === 'Estorno'
+                                ? 'bg-purple-100 text-purple-800 border border-purple-200'
+                                : s.entryType === 'servico'
+                                ? 'bg-blue-100 text-blue-800 border border-blue-200'
+                                : 'bg-amber-100 text-amber-800 border border-amber-200'
+                            }`}
+                          >
+                            {badgeText}
+                          </span>
+                        )}
+                        <span className="text-xs text-emerald-700 font-medium bg-emerald-50 px-2 py-0.5 rounded-md">
+                          {getPaymentMethodLabel(s.paymentMethod)}
+                        </span>
                       </div>
-                    )}
+                      <div className="text-xs text-slate-500 truncate mt-0.5">
+                        {s.items.map((i) => `${i.quantity}x ${i.name}`).join(', ')}
+                      </div>
+                      {s.customerName && (
+                        <div className="text-[11px] text-slate-500 font-medium">
+                          Cliente: {s.customerName}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => handleShareSale(s)}
+                        title="Mandar recibo no WhatsApp"
+                        className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center justify-center hover:bg-emerald-100 transition-colors"
+                      >
+                        <Share2 className="w-3.5 h-3.5" />
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setDeletingSaleId(isDeleting ? null : s.id)}
+                        title="Excluir lançamento"
+                        className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${
+                          isDeleting
+                            ? 'bg-rose-100 text-rose-700'
+                            : 'bg-slate-100 text-slate-400 hover:text-rose-600'
+                        }`}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
 
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => handleShareSale(s)}
-                      title="Mandar recibo no WhatsApp"
-                      className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center justify-center hover:bg-emerald-100 transition-colors"
-                    >
-                      <Share2 className="w-3.5 h-3.5" />
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (confirm('Deseja realmente cancelar este lançamento? Se houver produtos, o estoque será devolvido.')) {
-                          onCancelSale(s.id);
-                        }
-                      }}
-                      title="Cancelar lançamento"
-                      className="w-8 h-8 rounded-lg bg-slate-100 text-slate-400 hover:text-rose-600 flex items-center justify-center transition-colors"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
+                  {isDeleting && (
+                    <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 flex items-center justify-between gap-2 text-xs text-rose-900">
+                      <span className="font-semibold">
+                        Excluir lançamento? Itens de catálogo voltam ao estoque.
+                      </span>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (onDeleteSale) {
+                              onDeleteSale(s.id);
+                            } else {
+                              onCancelSale(s.id);
+                            }
+                            setDeletingSaleId(null);
+                          }}
+                          className="px-2.5 py-1 rounded-lg bg-rose-600 text-white font-bold hover:bg-rose-700 transition-colors"
+                        >
+                          Confirmar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDeletingSaleId(null)}
+                          className="px-2.5 py-1 rounded-lg bg-slate-200 text-slate-700 font-bold hover:bg-slate-300 transition-colors"
+                        >
+                          Cancelar
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             })}

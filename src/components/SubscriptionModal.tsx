@@ -21,6 +21,7 @@ interface SubscriptionModalProps {
   user: UserAccount;
   onClose: () => void;
   onSuccess: (updatedUser: UserAccount) => void;
+  onLogout?: () => void;
   isMandatoryBlock?: boolean;
   initialPaidSuccess?: boolean;
 }
@@ -32,6 +33,7 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
   user,
   onClose,
   onSuccess,
+  onLogout,
   isMandatoryBlock = false,
   initialPaidSuccess = false,
 }) => {
@@ -45,7 +47,7 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [externalRedirectUrl, setExternalRedirectUrl] = useState<string | null>(null);
   const [externalRedirectLabel, setExternalRedirectLabel] = useState<string>(
-    'Abrir Checkout Seguro da Stripe'
+    'Abrir Pagamento Seguro'
   );
   const [paidSuccess, setPaidSuccess] = useState(initialPaidSuccess);
 
@@ -124,7 +126,7 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
       const data = await response.json();
 
       if (!response.ok) {
-        setErrorMsg(data?.error || 'Não foi possível iniciar o pagamento na Stripe.');
+        setErrorMsg(data?.error || 'Não foi possível iniciar o pagamento agora.');
         return;
       }
 
@@ -137,9 +139,9 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
       }
 
       if (data.url) {
-        handleNavigateToStripe(data.url, 'Ir para Checkout Seguro da Stripe');
+        handleNavigateToStripe(data.url, 'Ir para Pagamento Seguro');
       } else {
-        setErrorMsg('A Stripe não retornou o link de checkout.');
+        setErrorMsg('Não foi possível gerar o link de pagamento.');
       }
     } catch {
       setErrorMsg('Erro de comunicação com o servidor de pagamentos.');
@@ -174,10 +176,10 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
       }
 
       if (data.url) {
-        handleNavigateToStripe(data.url, 'Abrir Portal do Cliente Stripe');
+        handleNavigateToStripe(data.url, 'Gerenciar Minha Assinatura');
       }
     } catch {
-      setErrorMsg('Erro de comunicação ao abrir o portal da Stripe.');
+      setErrorMsg('Erro de comunicação ao abrir a página da assinatura.');
     } finally {
       setIsOpeningPortal(false);
     }
@@ -192,10 +194,10 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
             <span className="w-2.5 h-2.5 rounded-full bg-emerald-600" />
             <h2 className="text-base font-bold text-slate-900">
               {user.subscriptionStatus === 'active'
-                ? 'Minha Assinatura Stripe'
+                ? 'Minha Assinatura'
                 : trialInfo.isExpired
-                ? 'Assinatura Vende.ai (Bloqueio)'
-                : 'Assinar Vende.ai via Stripe'}
+                ? 'Seu Teste de 7 Dias Terminou'
+                : 'Assinar Vende.ai'}
             </h2>
           </div>
           {!isMandatoryBlock && (
@@ -217,7 +219,7 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
             </div>
             <div>
               <h3 className="text-xl font-black text-slate-900">
-                Assinatura Confirmada na Stripe!
+                Assinatura Confirmada!
               </h3>
               <p className="text-xs text-slate-500 mt-1">
                 Seu acesso completo ao Vende.ai foi liberado automaticamente.
@@ -263,7 +265,7 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
               <span className="text-[11px] uppercase font-bold text-emerald-800 tracking-wider block">
                 {user.subscriptionStatus === 'active'
                   ? 'Assinatura Ativa'
-                  : 'Stripe Billing • Assinatura Recorrente'}
+                  : 'Assinatura Recorrente • Mensal ou Anual'}
               </span>
               <div className="flex items-baseline justify-center gap-1">
                 <span className="text-3xl sm:text-4xl font-black text-slate-900 font-mono-numbers tracking-tight">
@@ -285,7 +287,7 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
               <div className="p-3 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-center gap-2">
                 <Lock className="w-4 h-4 shrink-0 text-amber-600" />
                 <span>
-                  Seu período de acesso expirou. Conclua a assinatura segura pela Stripe para desbloquear imediatamente.
+                  Seus 7 dias grátis terminaram. Escolha um plano abaixo e conclua o pagamento para continuar usando.
                 </span>
               </div>
             )}
@@ -360,7 +362,7 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
               </div>
               <div className="flex items-center gap-2">
                 <Check className="w-4 h-4 text-emerald-600 shrink-0" />
-                <span>Cancelamento ou troca de cartão a qualquer momento pelo Portal Stripe</span>
+                <span>Cancelamento ou troca de cartão a qualquer momento pelo seu painel</span>
               </div>
             </div>
 
@@ -393,7 +395,7 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
             {externalRedirectUrl && (
               <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-300 space-y-2.5">
                 <p className="text-xs text-emerald-900 font-semibold">
-                  Sessão segura criada na Stripe! Clique abaixo para abrir o ambiente oficial de pagamento em uma nova aba:
+                  Link de pagamento seguro pronto! Clique abaixo para concluir sua assinatura em uma nova aba:
                 </p>
                 <a
                   href={externalRedirectUrl}
@@ -418,12 +420,16 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
                 {isProcessing ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>CONECTANDO À STRIPE...</span>
+                    <span>INICIANDO PAGAMENTO...</span>
                   </>
                 ) : (
                   <>
                     <CreditCard className="w-4 h-4" />
-                    <span>ASSINAR NA STRIPE ({formatCurrency(displayPrice)})</span>
+                    <span>
+                      {trialInfo.isExpired
+                        ? `CONTINUAR PARA PAGAMENTO (${formatCurrency(displayPrice)})`
+                        : `ASSINAR AGORA (${formatCurrency(displayPrice)})`}
+                    </span>
                     <ArrowRight className="w-4 h-4 stroke-[3]" />
                   </>
                 )}
@@ -440,12 +446,12 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
                 {isOpeningPortal ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>Abrindo Portal Stripe...</span>
+                    <span>Abrindo gerenciamento...</span>
                   </>
                 ) : (
                   <>
                     <Settings2 className="w-4 h-4 text-emerald-400" />
-                    <span>Gerenciar Assinatura e Cartão (Portal Stripe)</span>
+                    <span>Gerenciar Assinatura e Cartão</span>
                   </>
                 )}
               </button>
@@ -453,8 +459,18 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
 
             <div className="text-center text-[10px] text-slate-500 flex items-center justify-center gap-1">
               <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-              <span>Processado com criptografia PCI-DSS pela Stripe</span>
+              <span>Pagamento seguro com criptografia avançada</span>
             </div>
+
+            {onLogout && trialInfo.isExpired && user.subscriptionStatus !== 'active' && (
+              <button
+                type="button"
+                onClick={onLogout}
+                className="w-full py-2 text-xs font-bold text-slate-500 hover:text-rose-600 transition-colors"
+              >
+                Sair desta conta
+              </button>
+            )}
           </div>
         )}
       </div>

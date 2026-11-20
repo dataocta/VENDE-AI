@@ -28,14 +28,17 @@ export const EditSaleModal: React.FC<EditSaleModalProps> = ({
   const [customerName, setCustomerName] = useState<string>(sale.customerName || '');
   const [customerPhone, setCustomerPhone] = useState<string>(sale.customerPhone || '');
   const [dateStr, setDateStr] = useState<string>(sale.date.split('T')[0]);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setFormError(null);
     const num = parseFloat(totalAmountStr.replace(',', '.'));
     if (!num || num <= 0) return;
 
     if (paymentMethod === 'fiado' && !customerName.trim()) {
-      alert('Para venda a prazo, informe o nome do cliente!');
+      setFormError('Para venda a prazo, informe o nome do cliente!');
       return;
     }
 
@@ -204,21 +207,50 @@ export const EditSaleModal: React.FC<EditSaleModalProps> = ({
             </div>
           </div>
 
+          {formError && (
+            <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-xs font-semibold text-rose-700">
+              {formError}
+            </div>
+          )}
+
+          {/* Inline Delete Confirmation */}
+          {confirmDelete && (
+            <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 flex items-center justify-between gap-2 text-xs text-rose-900">
+              <span>Excluir venda {sale.code} de {formatCurrency(sale.totalAmount)}?</span>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    onDelete(sale.id);
+                    onClose();
+                  }}
+                  className="px-2.5 py-1 rounded-lg bg-rose-600 text-white font-bold hover:bg-rose-700"
+                >
+                  Confirmar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmDelete(false)}
+                  className="px-2.5 py-1 rounded-lg bg-slate-200 text-slate-700 font-bold hover:bg-slate-300"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Action Footer */}
           <div className="pt-2 flex items-center justify-between gap-2 border-t border-slate-100">
-            <button
-              type="button"
-              onClick={() => {
-                if (confirm(`Deseja realmente excluir a venda ${sale.code} de ${formatCurrency(sale.totalAmount)}? O estoque será devolvido.`)) {
-                  onDelete(sale.id);
-                  onClose();
-                }
-              }}
-              className="p-2.5 rounded-xl text-rose-600 hover:bg-rose-50 border border-rose-200 text-xs font-bold flex items-center gap-1 shrink-0"
-            >
-              <Trash2 className="w-4 h-4" />
-              <span>Excluir</span>
-            </button>
+            {!confirmDelete && (
+              <button
+                type="button"
+                onClick={() => setConfirmDelete(true)}
+                className="p-2.5 rounded-xl text-rose-600 hover:bg-rose-50 border border-rose-200 text-xs font-bold flex items-center gap-1 shrink-0"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>Excluir</span>
+              </button>
+            )}
 
             <div className="flex-1 flex gap-2 justify-end">
               <button

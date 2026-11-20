@@ -305,7 +305,7 @@ export const AccountSettingsView: React.FC<AccountSettingsViewProps> = ({
               className="text-xs font-bold text-emerald-700 hover:underline"
             >
               {isSuperAdmin
-                ? 'Testar Assinatura Stripe'
+                ? 'Testar Assinatura'
                 : user?.subscriptionStatus === 'active'
                 ? 'Gerenciar Assinatura'
                 : 'Ver Plano'}

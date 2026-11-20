@@ -790,6 +790,21 @@ export default function App() {
     saveUserProfileFirestore(updated).catch(console.error);
   };
 
+  const isCurrentUserTrialExpired = Boolean(
+    currentUser &&
+      currentUser.email?.toLowerCase() !== 'cosquinha66@gmail.com' &&
+      currentUser.subscriptionStatus !== 'blocked' &&
+      currentUser.subscriptionStatus !== 'active' &&
+      (currentUser.subscriptionStatus === 'expired' || getTrialInfo(currentUser).isExpired)
+  );
+
+  // Ao expirar os 7 dias grátis, abre o checkout da Stripe automaticamente
+  useEffect(() => {
+    if (isCurrentUserTrialExpired) {
+      setIsSubscriptionOpen(true);
+    }
+  }, [currentUser?.id, isCurrentUserTrialExpired]);
+
   // If user is not logged in, show AuthView
   if (!currentUser) {
     return (
@@ -816,32 +831,50 @@ export default function App() {
 
   // Check if account is blocked or expired (Super Admin is never locked out)
   const isSuperAdmin = currentUser.email?.toLowerCase() === 'cosquinha66@gmail.com';
+  const isAdminBlocked = !isSuperAdmin && currentUser.subscriptionStatus === 'blocked';
   const isAccountBlocked =
     !isSuperAdmin &&
-    (currentUser.subscriptionStatus === 'blocked' ||
+    (isAdminBlocked ||
       currentUser.subscriptionStatus === 'expired' ||
       trialInfo.isExpired);
 
   if (isAccountBlocked) {
     return (
       <div className="min-h-screen bg-slate-100 flex flex-col justify-center items-center px-4 py-8">
-        <div className="w-full max-w-sm bg-white border border-rose-200 rounded-3xl p-6 shadow-xl text-center space-y-4">
-          <div className="w-16 h-16 rounded-3xl bg-rose-100 text-rose-600 flex items-center justify-center mx-auto shadow-inner">
-            <Lock className="w-8 h-8" />
+        <div
+          className={`w-full max-w-sm bg-white border rounded-3xl p-6 shadow-xl text-center space-y-4 ${
+            isAdminBlocked ? 'border-rose-200' : 'border-amber-200'
+          }`}
+        >
+          <div
+            className={`w-16 h-16 rounded-3xl flex items-center justify-center mx-auto shadow-inner ${
+              isAdminBlocked
+                ? 'bg-rose-100 text-rose-600'
+                : 'bg-amber-100 text-amber-600'
+            }`}
+          >
+            {isAdminBlocked ? <Lock className="w-8 h-8" /> : <CreditCard className="w-8 h-8" />}
           </div>
 
           <div>
-            <span className="text-[11px] font-black uppercase tracking-wider px-2.5 py-1 rounded-full bg-rose-100 text-rose-800 inline-block mb-1">
-              Acesso Bloqueado
+            <span
+              className={`text-[11px] font-black uppercase tracking-wider px-2.5 py-1 rounded-full inline-block mb-1 ${
+                isAdminBlocked
+                  ? 'bg-rose-100 text-rose-800'
+                  : 'bg-amber-100 text-amber-800'
+              }`}
+            >
+              {isAdminBlocked ? 'Acesso Bloqueado' : 'Teste de 7 Dias Encerrado'}
             </span>
             <h2 className="text-lg font-black text-slate-900 tracking-tight">
-              Acesso ao Vende.ai Suspenso
+              {isAdminBlocked
+                ? 'Acesso ao Vende.ai Suspenso'
+                : 'Seus 7 dias grátis terminaram'}
             </h2>
             <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
-              {currentUser.subscriptionStatus === 'blocked'
-                ? 'Seu acesso ao sistema foi suspenso pelo administrador.'
-                : 'Seu período de teste gratuito chegou ao fim.'}{' '}
-              Para liberar seu acesso e continuar vendendo, entre em contato ou assine seu plano.
+              {isAdminBlocked
+                ? 'Seu acesso ao sistema foi suspenso pelo administrador. Entre em contato para mais detalhes.'
+                : 'Agora escolha seu plano para concluir o pagamento e liberar o sistema para continuar suas vendas.'}
             </p>
           </div>
 
@@ -854,32 +887,35 @@ export default function App() {
               E-mail: <span className="font-mono text-slate-700">{currentUser.email}</span>
             </div>
             <div className="text-slate-500">
-              Status: <span className="text-rose-600 font-bold">Bloqueado</span>
+              Status:{' '}
+              <span className="text-rose-600 font-bold">
+                {isAdminBlocked ? 'Bloqueado' : 'Teste Grátis Expirado'}
+              </span>
             </div>
           </div>
 
           {/* Action buttons */}
           <div className="space-y-2 pt-2">
-            <a
-              href={`https://wa.me/55${(settings.phone || '11999999999').replace(/\D/g, '')}?text=${encodeURIComponent(
-                `Olá, gostaria de solicitar a liberação do meu acesso ao Vende.ai (E-mail: ${currentUser.email})`
-              )}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="w-full min-h-[46px] rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs flex items-center justify-center gap-2 transition-all shadow-xs"
-            >
-              <Phone className="w-4 h-4" />
-              <span>Falar no WhatsApp para Liberar</span>
-            </a>
-
             <button
               type="button"
               onClick={() => setIsSubscriptionOpen(true)}
-              className="w-full min-h-[44px] rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-xs"
+              className="w-full min-h-[48px] rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs flex items-center justify-center gap-2 transition-all shadow-xs"
             >
-              <CreditCard className="w-4 h-4 text-emerald-400" />
-              <span>Assinar Plano (R$ 15,97/mês)</span>
+              <CreditCard className="w-4 h-4" />
+              <span>Assinar Agora (R$ 15,97/mês)</span>
             </button>
+
+            <a
+              href={`https://wa.me/55${(settings.phone || '11999999999').replace(/\D/g, '')}?text=${encodeURIComponent(
+                `Olá, gostaria de falar sobre meu acesso ao Vende.ai (E-mail: ${currentUser.email})`
+              )}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-full min-h-[42px] rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs flex items-center justify-center gap-2 transition-all"
+            >
+              <Phone className="w-4 h-4 text-emerald-600" />
+              <span>Falar no WhatsApp</span>
+            </a>
 
             <button
               type="button"
@@ -892,7 +928,7 @@ export default function App() {
           </div>
         </div>
 
-        {/* Modal de Assinatura se o usuário quiser assinar diretamente da tela de bloqueio */}
+        {/* Modal de Assinatura / Checkout Stripe */}
         <SubscriptionModal
           isOpen={isSubscriptionOpen}
           onClose={() => {
@@ -901,6 +937,7 @@ export default function App() {
           }}
           user={currentUser}
           initialPaidSuccess={stripePaidSuccess}
+          onLogout={handleLogout}
           onSuccess={(updatedUser: UserAccount) => {
             setCurrentUser(updatedUser);
             upsertLocalUser(updatedUser);
@@ -947,6 +984,7 @@ export default function App() {
             settings={settings}
             onCompleteSale={handleCompleteSale}
             onCancelSale={handleCancelSale}
+            onDeleteSale={handleDeleteSale}
             onOpenNumpadSale={() => setIsNumpadOpen(true)}
             onOpenNewExpense={() => setIsExpenseOpen(true)}
             onOpenPaymentModal={(debt) => setPayingDebt(debt)}

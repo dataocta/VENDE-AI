@@ -16,8 +16,6 @@ import {
   Receipt,
   RotateCcw,
   Plus,
-  ExternalLink,
-  Loader2,
   CreditCard,
   X,
   CheckCircle2,
@@ -63,13 +61,8 @@ export const AuthView: React.FC<AuthViewProps> = ({
 
   // Selected plan state
   const [selectedPlan, setSelectedPlan] = useState<PlanId>(() =>
-    pendingStripeCheckout?.plan || 'monthly'
+    pendingStripeCheckout?.plan || 'trial'
   );
-
-  // Pre-login Stripe Checkout state
-  const [isStartingCheckout, setIsStartingCheckout] = useState<PlanId | null>(null);
-  const [stripeCheckoutUrl, setStripeCheckoutUrl] = useState<string | null>(null);
-  const [stripeCheckoutError, setStripeCheckoutError] = useState<string | null>(null);
 
   // Landing page interactive states
   const [heroMode, setHeroMode] = useState<'photo' | 'simulator'>('photo');
@@ -115,8 +108,6 @@ export const AuthView: React.FC<AuthViewProps> = ({
       if (pendingStripeCheckout.customerEmail && !regEmail) {
         setRegEmail(pendingStripeCheckout.customerEmail);
       }
-      setStripeCheckoutUrl(null);
-      setStripeCheckoutError(null);
       setErrorMessage(null);
     }
   }, [pendingStripeCheckout]);
@@ -280,70 +271,17 @@ export const AuthView: React.FC<AuthViewProps> = ({
     setSimReceiptSent(false);
   };
 
-  const startPreLoginStripeCheckout = async (
-    planId: PlanId,
-    prefill?: { name?: string; email?: string }
-  ) => {
-    setSelectedPlan(planId);
-    setStripeCheckoutError(null);
-    setErrorMessage(null);
-    setStripeCheckoutUrl(null);
-    setIsStartingCheckout(planId);
-
-    try {
-      const response = await fetch('/api/stripe/create-checkout-session', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          plan: planId,
-          name: prefill?.name?.trim() || undefined,
-          email: prefill?.email?.trim() || undefined,
-          returnUrl: window.location.origin,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok || !data?.url) {
-        const msg =
-          data?.error || 'Não foi possível iniciar o checkout da Stripe agora.';
-        setStripeCheckoutError(msg);
-        setErrorMessage(msg);
-        return;
-      }
-
-      const isInIframe = typeof window !== 'undefined' && window.self !== window.top;
-      if (!isInIframe) {
-        window.location.assign(data.url);
-        return;
-      }
-
-      setStripeCheckoutUrl(data.url);
-    } catch {
-      const msg = 'Erro de conexão ao iniciar o pagamento na Stripe.';
-      setStripeCheckoutError(msg);
-      setErrorMessage(msg);
-    } finally {
-      setIsStartingCheckout(null);
-    }
-  };
-
   const handleSelectPlanAndProceed = (planId: PlanId) => {
-    if (pendingStripeCheckout) {
-      setSelectedPlan(planId);
-      setMode('register');
-      setErrorMessage(null);
-      setPageView('auth');
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-      return;
-    }
-    startPreLoginStripeCheckout(planId);
+    setSelectedPlan(planId);
+    setMode('register');
+    setErrorMessage(null);
+    setPageView('auth');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleGoToLoginDirect = () => {
     setMode('login');
     setErrorMessage(null);
-    setStripeCheckoutError(null);
     setPageView('auth');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -528,14 +466,6 @@ export const AuthView: React.FC<AuthViewProps> = ({
     e.preventDefault();
     setErrorMessage(null);
 
-    if (!pendingStripeCheckout) {
-      await startPreLoginStripeCheckout(selectedPlan, {
-        name: regName,
-        email: regEmail,
-      });
-      return;
-    }
-
     const cleanName = regName.trim();
     const cleanEmail = regEmail.trim().toLowerCase();
     const cleanPhoneDigits = regPhone.replace(/\D/g, '');
@@ -584,17 +514,19 @@ export const AuthView: React.FC<AuthViewProps> = ({
         businessName,
         createdAt: nowIso,
         trialEndsAt:
-          pendingStripeCheckout.subscriptionStatus === 'trial' &&
+          pendingStripeCheckout?.subscriptionStatus === 'trial' &&
           pendingStripeCheckout.currentPeriodEnd
             ? pendingStripeCheckout.currentPeriodEnd
             : sevenDaysLaterIso,
-        subscriptionStatus: pendingStripeCheckout.subscriptionStatus || 'active',
-        planPrice: pendingStripeCheckout.planPrice || planData.priceNumber,
-        selectedPlan: pendingStripeCheckout.plan || selectedPlan,
-        stripeCustomerId: pendingStripeCheckout.stripeCustomerId,
-        stripeSubscriptionId: pendingStripeCheckout.stripeSubscriptionId,
-        subscriptionPaidAt: nowIso,
-        subscriptionExpiresAt: pendingStripeCheckout.currentPeriodEnd,
+        subscriptionStatus: pendingStripeCheckout
+          ? pendingStripeCheckout.subscriptionStatus || 'active'
+          : 'trial',
+        planPrice: pendingStripeCheckout?.planPrice || planData.priceNumber,
+        selectedPlan: pendingStripeCheckout?.plan || selectedPlan,
+        stripeCustomerId: pendingStripeCheckout?.stripeCustomerId,
+        stripeSubscriptionId: pendingStripeCheckout?.stripeSubscriptionId,
+        subscriptionPaidAt: pendingStripeCheckout ? nowIso : undefined,
+        subscriptionExpiresAt: pendingStripeCheckout?.currentPeriodEnd,
       };
 
       await saveUserProfileFirestore(userAccount);
@@ -811,21 +743,11 @@ export const AuthView: React.FC<AuthViewProps> = ({
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 pt-1">
                 <button
                   type="button"
-                  disabled={isStartingCheckout !== null}
-                  onClick={() => handleSelectPlanAndProceed('monthly')}
-                  className="min-h-[50px] px-6 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-70 text-white font-bold text-sm sm:text-base flex items-center justify-center gap-2 shadow-sm transition-colors touch-press whitespace-nowrap"
+                  onClick={() => handleSelectPlanAndProceed('trial')}
+                  className="min-h-[50px] px-6 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm sm:text-base flex items-center justify-center gap-2 shadow-sm transition-colors touch-press whitespace-nowrap"
                 >
-                  {isStartingCheckout === 'monthly' ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      <span>Abrindo Stripe Checkout...</span>
-                    </>
-                  ) : (
-                    <>
-                      <span>Assinar Agora na Stripe</span>
-                      <ArrowRight className="w-4 h-4" />
-                    </>
-                  )}
+                  <span>Testar 7 Dias Grátis</span>
+                  <ArrowRight className="w-4 h-4" />
                 </button>
 
                 <a
@@ -839,8 +761,6 @@ export const AuthView: React.FC<AuthViewProps> = ({
               {/* Clean Unboxed Trust Line */}
               <div className="pt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs sm:text-sm text-slate-500 font-medium">
                 <span>7 dias sem cartão</span>
-                <span aria-hidden="true">·</span>
-                <span>Funciona mesmo offline</span>
                 <span aria-hidden="true">·</span>
                 <span>Salvo em nuvem</span>
               </div>
@@ -883,27 +803,12 @@ export const AuthView: React.FC<AuthViewProps> = ({
               {/* Content Frame */}
               {heroMode === 'photo' ? (
                 <div className="relative rounded-3xl overflow-hidden border border-slate-200 shadow-lg bg-gradient-to-b from-slate-50 via-white to-emerald-50/40 animate-reveal flex flex-col">
-                  <div className="px-4 pt-5 pb-2 flex items-center justify-center">
+                  <div className="px-4 py-5 flex items-center justify-center">
                     <img
                       src="/assets/aistudio/Design_sem_nome_0b38a664.png"
                       alt="Aplicativo Vende.ai no celular mostrando o caixa de hoje, entradas e saldo a prazo"
                       className="w-full max-h-[420px] sm:max-h-[460px] object-contain mx-auto"
                     />
-                  </div>
-                  <div className="bg-slate-900/95 px-5 py-4 text-white flex items-center justify-between gap-4">
-                    <div>
-                      <div className="text-sm font-bold">Feito para o ritmo da rua</div>
-                      <div className="text-xs text-slate-300">
-                        Interface simples com números grandes para usar sob o sol ou em movimento.
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setHeroMode('simulator')}
-                      className="px-3.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs shrink-0 transition-colors whitespace-nowrap"
-                    >
-                      Simular venda
-                    </button>
                   </div>
                 </div>
               ) : (
@@ -1214,25 +1119,15 @@ export const AuthView: React.FC<AuthViewProps> = ({
 
                     <button
                       type="button"
-                      disabled={isStartingCheckout !== null}
                       onClick={() => handleSelectPlanAndProceed(pId)}
-                      className={`w-full min-h-[48px] rounded-xl font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-colors mt-7 touch-press disabled:opacity-70 ${
+                      className={`w-full min-h-[48px] rounded-xl font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-colors mt-7 touch-press ${
                         isPro
                           ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950'
                           : 'bg-slate-900 hover:bg-slate-800 text-white'
                       }`}
                     >
-                      {isStartingCheckout === pId ? (
-                        <>
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                          <span>Conectando à Stripe...</span>
-                        </>
-                      ) : (
-                        <>
-                          <span>{plan.buttonLabel}</span>
-                          <ArrowRight className="w-4 h-4" />
-                        </>
-                      )}
+                      <span>{pId === 'trial' ? plan.buttonLabel : `Testar 7 Dias Grátis (${plan.name})`}</span>
+                      <ArrowRight className="w-4 h-4" />
                     </button>
                   </div>
                 );
@@ -1328,72 +1223,46 @@ export const AuthView: React.FC<AuthViewProps> = ({
           </div>
         </footer>
 
-        {/* Pre-login Stripe Checkout Handoff Modal (shown when running inside an iframe or on errors) */}
-        {(stripeCheckoutUrl || stripeCheckoutError || stripeCheckoutCancelled) && (
+        {/* Checkout Cancelled Notice */}
+        {stripeCheckoutCancelled && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
             <div className="w-full max-w-md bg-white border border-slate-200 rounded-3xl p-6 shadow-2xl space-y-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <CreditCard className="w-5 h-5 text-emerald-600" />
                   <h3 className="text-base font-extrabold text-slate-900">
-                    {stripeCheckoutError
-                      ? 'Erro ao iniciar Checkout'
-                      : stripeCheckoutCancelled
-                      ? 'Checkout cancelado'
-                      : 'Checkout Seguro da Stripe'}
+                    Checkout cancelado
                   </h3>
                 </div>
                 <button
                   type="button"
-                  onClick={() => {
-                    setStripeCheckoutUrl(null);
-                    setStripeCheckoutError(null);
-                    onClearPendingStripe?.();
-                  }}
+                  onClick={() => onClearPendingStripe?.()}
                   className="w-8 h-8 rounded-full bg-slate-100 text-slate-500 hover:text-slate-800 flex items-center justify-center"
                 >
                   <X className="w-4 h-4" />
                 </button>
               </div>
 
-              {stripeCheckoutError ? (
-                <div className="p-3 rounded-2xl bg-rose-50 border border-rose-200 text-xs text-rose-800">
-                  {stripeCheckoutError}
-                </div>
-              ) : stripeCheckoutUrl ? (
-                <>
-                  <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-900 space-y-1">
-                    <div className="font-bold">
-                      Plano selecionado: {plansConfig[selectedPlan].name} (
-                      {plansConfig[selectedPlan].priceStr}{' '}
-                      {plansConfig[selectedPlan].period})
-                    </div>
-                    <p className="text-emerald-800">
-                      Finalize o checkout seguro da Stripe primeiro. Assim que concluir, você voltará automaticamente para criar sua senha ou entrar com o Google.
-                    </p>
-                  </div>
-
-                  <a
-                    href={stripeCheckoutUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="w-full min-h-[48px] rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-sm flex items-center justify-center gap-2 shadow-xs transition-colors"
-                  >
-                    <span>Ir para Checkout Seguro da Stripe</span>
-                    <ExternalLink className="w-4 h-4" />
-                  </a>
-                </>
-              ) : (
-                <p className="text-xs text-slate-600">
-                  Você cancelou o checkout na Stripe. Escolha qualquer plano abaixo para tentar novamente quando quiser.
-                </p>
-              )}
+              <p className="text-xs text-slate-600">
+                Você cancelou o pagamento antes de concluir. Você pode começar seus 7 dias grátis agora mesmo sem cartão ou fazer login na sua conta.
+              </p>
 
               <button
                 type="button"
                 onClick={() => {
-                  setStripeCheckoutUrl(null);
-                  setStripeCheckoutError(null);
+                  onClearPendingStripe?.();
+                  handleSelectPlanAndProceed('trial');
+                }}
+                className="w-full min-h-[46px] rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs flex items-center justify-center gap-2"
+              >
+                <span>Começar 7 Dias Grátis</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  onClearPendingStripe?.();
                   handleGoToLoginDirect();
                 }}
                 className="w-full py-2 text-xs font-bold text-slate-500 hover:text-slate-900 transition-colors"
@@ -1450,7 +1319,7 @@ export const AuthView: React.FC<AuthViewProps> = ({
             </div>
             <div className="min-w-0">
               <span className="font-extrabold text-emerald-950 block">
-                Checkout da Stripe Confirmado!
+                Assinatura Confirmada!
               </span>
               <span className="text-[11px] text-emerald-800 block mt-0.5">
                 Plano {activePlanInfo.name} liberado. Agora crie sua senha ou entre com o Google para acessar o sistema.
@@ -1470,7 +1339,7 @@ export const AuthView: React.FC<AuthViewProps> = ({
         {/* Clean Auth Card */}
         <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-xs space-y-4">
           
-          {/* Mode Switcher: Fazer Login vs Escolher Planos (ou Finalizar Cadastro após Stripe) */}
+          {/* Mode Switcher: Fazer Login vs Teste 7 Dias Grátis */}
           <div className="grid grid-cols-2 gap-1 p-1 bg-slate-100 rounded-2xl">
             <button
               type="button"
@@ -1486,79 +1355,68 @@ export const AuthView: React.FC<AuthViewProps> = ({
             >
               Fazer Login
             </button>
-            {pendingStripeCheckout ? (
-              <button
-                type="button"
-                onClick={() => {
-                  setMode('register');
-                  setErrorMessage(null);
-                }}
-                className={`py-2 text-xs font-bold rounded-xl transition-all ${
-                  mode === 'register'
-                    ? 'bg-emerald-600 text-white shadow-xs'
-                    : 'text-slate-500 hover:text-slate-900'
-                }`}
-              >
-                Finalizar Cadastro
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={() => {
-                  setErrorMessage(null);
-                  setPageView('landing');
-                  setTimeout(() => {
-                    document
-                      .getElementById('planos')
-                      ?.scrollIntoView({ behavior: 'smooth' });
-                  }, 60);
-                }}
-                className="py-2 text-xs font-bold rounded-xl transition-all text-emerald-700 hover:text-emerald-900 hover:bg-emerald-50"
-              >
-                Escolher Planos
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={() => {
+                setMode('register');
+                setErrorMessage(null);
+              }}
+              className={`py-2 text-xs font-bold rounded-xl transition-all ${
+                mode === 'register'
+                  ? 'bg-emerald-600 text-white shadow-xs'
+                  : 'text-slate-500 hover:text-slate-900'
+              }`}
+            >
+              {pendingStripeCheckout ? 'Finalizar Cadastro' : 'Teste 7 Dias Grátis'}
+            </button>
           </div>
 
-          {/* 1. Botão Oficial: Login com o Google (disponível no Login ou após concluir Checkout Stripe) */}
-          {(mode === 'login' || pendingStripeCheckout) && (
-            <>
-              <button
-                type="button"
-                onClick={handleGoogleRealLogin}
-                disabled={isLoading}
-                className="w-full min-h-[46px] rounded-2xl bg-white hover:bg-slate-50 border border-slate-300 text-slate-800 font-bold text-xs flex items-center justify-center gap-2.5 shadow-xs touch-press transition-colors disabled:opacity-50"
-              >
-                <svg className="w-4 h-4" viewBox="0 0 24 24">
-                  <path
-                    fill="#4285F4"
-                    d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                  />
-                  <path
-                    fill="#34A853"
-                    d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                  />
-                  <path
-                    fill="#FBBC05"
-                    d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
-                  />
-                  <path
-                    fill="#EA4335"
-                    d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
-                  />
-                </svg>
-                <span>{isLoading ? 'Conectando ao Google...' : 'Continuar com o Google'}</span>
-              </button>
-
-              {/* Divider */}
-              <div className="relative flex items-center justify-center">
-                <div className="w-full border-t border-slate-200" />
-                <span className="bg-white px-2.5 text-[11px] text-slate-400 font-medium">
-                  ou com e-mail e senha
-                </span>
+          {mode === 'register' && !pendingStripeCheckout && (
+            <div className="p-3 rounded-2xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-900 space-y-0.5">
+              <div className="font-extrabold">
+                7 Dias Grátis — Sem cartão agora
               </div>
-            </>
+              <p className="text-[11px] text-emerald-800 leading-relaxed">
+                Crie sua conta grátis para usar tudo liberado por 7 dias. Você só escolhe um plano pago se quiser continuar após o término do teste.
+              </p>
+            </div>
           )}
+
+          {/* 1. Botão Oficial: Login/Cadastro com o Google */}
+          <button
+            type="button"
+            onClick={handleGoogleRealLogin}
+            disabled={isLoading}
+            className="w-full min-h-[46px] rounded-2xl bg-white hover:bg-slate-50 border border-slate-300 text-slate-800 font-bold text-xs flex items-center justify-center gap-2.5 shadow-xs touch-press transition-colors disabled:opacity-50"
+          >
+            <svg className="w-4 h-4" viewBox="0 0 24 24">
+              <path
+                fill="#4285F4"
+                d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+              />
+              <path
+                fill="#34A853"
+                d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+              />
+              <path
+                fill="#FBBC05"
+                d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
+              />
+              <path
+                fill="#EA4335"
+                d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
+              />
+            </svg>
+            <span>{isLoading ? 'Conectando ao Google...' : 'Continuar com o Google'}</span>
+          </button>
+
+          {/* Divider */}
+          <div className="relative flex items-center justify-center">
+            <div className="w-full border-t border-slate-200" />
+            <span className="bg-white px-2.5 text-[11px] text-slate-400 font-medium">
+              ou com e-mail e senha
+            </span>
+          </div>
 
           {/* Modo Login */}
           {mode === 'login' ? (
@@ -1613,94 +1471,8 @@ export const AuthView: React.FC<AuthViewProps> = ({
                 <ArrowRight className="w-3.5 h-3.5" />
               </button>
             </form>
-          ) : !pendingStripeCheckout ? (
-            /* Modo Cadastro antes de pagar -> Obriga passar pelo Checkout da Stripe primeiro */
-            <div className="space-y-3">
-              <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 text-xs text-slate-700 space-y-1.5">
-                <div className="font-extrabold text-slate-900">
-                  Passo 1 de 2: Checkout Seguro na Stripe
-                </div>
-                <p className="text-slate-600 leading-relaxed">
-                  Antes do seu primeiro acesso, conclua a assinatura ou ative o teste no Checkout da Stripe. Logo após finalizar, você cria sua senha e entra no sistema.
-                </p>
-              </div>
-
-              <div>
-                <label className="text-xs font-semibold text-slate-700 block mb-1">
-                  Seu Nome Completo
-                </label>
-                <div className="relative">
-                  <User className="w-4 h-4 text-slate-400 absolute left-3 top-3.5" />
-                  <input
-                    type="text"
-                    placeholder="Ex: Carlos Silva"
-                    value={regName}
-                    onChange={(e) => setRegName(e.target.value)}
-                    className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-white border border-slate-300 text-slate-900 text-xs focus:outline-none focus:border-emerald-500 font-medium"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="text-xs font-semibold text-slate-700 block mb-1">
-                  E-mail (usado no recibo Stripe)
-                </label>
-                <div className="relative">
-                  <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-3.5" />
-                  <input
-                    type="email"
-                    placeholder="seuemail@gmail.com"
-                    value={regEmail}
-                    onChange={(e) => setRegEmail(e.target.value)}
-                    className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-white border border-slate-300 text-slate-900 text-xs focus:outline-none focus:border-emerald-500 font-medium"
-                  />
-                </div>
-              </div>
-
-              {stripeCheckoutUrl && (
-                <div className="p-3 rounded-2xl bg-emerald-50 border border-emerald-300 space-y-2">
-                  <div className="text-[11px] font-bold text-emerald-900">
-                    Sessão criada! Clique abaixo para abrir o Checkout da Stripe:
-                  </div>
-                  <a
-                    href={stripeCheckoutUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="w-full min-h-[44px] rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs flex items-center justify-center gap-2 shadow-xs"
-                  >
-                    <span>Abrir Checkout Seguro da Stripe</span>
-                    <ExternalLink className="w-4 h-4" />
-                  </a>
-                </div>
-              )}
-
-              <button
-                type="button"
-                disabled={isStartingCheckout !== null}
-                onClick={() =>
-                  startPreLoginStripeCheckout(selectedPlan, {
-                    name: regName,
-                    email: regEmail,
-                  })
-                }
-                className="w-full min-h-[48px] rounded-2xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-70 text-white font-extrabold text-xs flex items-center justify-center gap-2 shadow-xs touch-press transition-colors tracking-wide"
-              >
-                {isStartingCheckout !== null ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>CONECTANDO À STRIPE...</span>
-                  </>
-                ) : (
-                  <>
-                    <CreditCard className="w-4 h-4" />
-                    <span>IR PARA CHECKOUT DA STRIPE</span>
-                    <ArrowRight className="w-3.5 h-3.5" />
-                  </>
-                )}
-              </button>
-            </div>
           ) : (
-            /* Modo Cadastro após concluir Checkout Stripe */
+            /* Modo Cadastro Direto (7 dias grátis sem checkout ou após retorno da Stripe) */
             <form onSubmit={handleRegisterSubmit} className="space-y-3">
               <div>
                 <label className="text-xs font-semibold text-slate-700 block mb-1">
@@ -1776,7 +1548,13 @@ export const AuthView: React.FC<AuthViewProps> = ({
                 disabled={isLoading}
                 className="w-full min-h-[46px] rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs flex items-center justify-center gap-1.5 shadow-xs touch-press transition-colors tracking-wide mt-2"
               >
-                <span>{isLoading ? 'CRIANDO CONTA...' : 'FINALIZAR CADASTRO E ENTRAR'}</span>
+                <span>
+                  {isLoading
+                    ? 'CRIANDO CONTA...'
+                    : pendingStripeCheckout
+                    ? 'FINALIZAR CADASTRO E ENTRAR'
+                    : 'COMEÇAR 7 DIAS GRÁTIS'}
+                </span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </button>
             </form>
